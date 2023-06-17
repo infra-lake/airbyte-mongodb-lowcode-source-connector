@@ -2,7 +2,7 @@ import { MetricHelper } from '../helpers/metric.helper.mjs'
 
 export class MetricsController {
 
-    static path = '/metrics$'
+    static path = '^/metrics$'
     
     async get(request, response) {
         response.setHeader('Content-Type', MetricHelper.contentType)
