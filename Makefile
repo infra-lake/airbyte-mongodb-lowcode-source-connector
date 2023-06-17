@@ -45,7 +45,6 @@ deploy:
 	@mkdir -p ./.kubernetes/.applied
 	@cp -r ./.kubernetes/* ./.kubernetes/.applied/
 	@sed -i -r "s@\\$$\{DOCKER_IMAGE\}@${DOCKER_IMAGE}.debug@g" ./.kubernetes/.applied/app/deployment.yaml
-	@kubectl cluster-info --context kind-${PROJECT_NAME}
 	@kubectl apply -f ./.kubernetes/.applied/app/namespace.yaml
 	@kubectl apply -f ./.kubernetes/.applied/app
 
