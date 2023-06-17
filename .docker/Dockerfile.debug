@@ -1,0 +1,12 @@
+ARG NODE_VERSION=18
+ARG NPM_VERSION=9.7.1
+
+FROM node:${NODE_VERSION}-slim
+ARG NPM_VERSION
+RUN npm install -g npm@${NPM_VERSION}
+WORKDIR /opt/app/
+ADD ./package.json ./package.json
+ADD ./package-lock.json ./package-lock.json
+RUN npm install
+ADD ./src ./src
+ENTRYPOINT node --inspect=0.0.0.0:9229 src/index.mjs

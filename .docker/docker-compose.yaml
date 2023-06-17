@@ -1,0 +1,44 @@
+services:
+
+  # MongoDB ###########################################################
+  mongodb:
+    image: mongo
+    container_name: ${MONGODB_HOST:-mongodb}
+    ports:
+      - ${MONGODB_PORT:-27017}:27017
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USERNAME:-mongodb}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD:-mongodb}
+    restart: always
+
+  mongo-express:
+    image: mongo-express
+    container_name: mongo-express
+    ports:
+      - ${MONGOEXPRESS_PORT:-8081}:8081
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: ${MONGODB_USERNAME:-mongodb}
+      ME_CONFIG_MONGODB_ADMINPASSWORD: ${MONGODB_PASSWORD:-mongodb}
+      ME_CONFIG_MONGODB_URL: ${MONGODB_PROTOCOL:-mongodb}://${MONGODB_USERNAME:-mongodb}:${MONGODB_PASSWORD:-mongodb}@${MONGODB_HOST:-mongodb}:${MONGODB_PORT:-27017}/
+    restart: always
+    depends_on:
+      - mongodb
+
+  # APP #######################################################
+  app:
+    build:
+      context: ../
+      dockerfile: ./.docker/Dockerfile.debug
+    container_name: app
+    restart: always
+    environment:
+      MONGODB_PROTOCOL: ${MONGODB_PROTOCOL:-mongodb}
+      MONGODB_USERNAME: ${MONGODB_USERNAME:-mongodb}
+      MONGODB_PASSWORD: ${MONGODB_PASSWORD:-mongodb}
+      MONGODB_HOST: ${MONGODB_HOST:-mongodb}
+      MONGODB_PORT: ${MONGODB_PORT:-27017}
+    ports:
+      - "${PORT:-4000}:${PORT:-4000}"
+      - "9229:9229"
+    depends_on:
+      - mongodb
