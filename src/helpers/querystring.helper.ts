@@ -1,10 +1,8 @@
-import { RegExpIOCHelper } from './regexpioc.helper.mjs'
-
 export class QueryStringHelper {
 
-    transform(value) {
+    public static transform(value: string) {
 
-        if ((value?.trim() ?? '') === '') {
+        if (value.trim() === '') {
             return ''
         }
 
@@ -20,5 +18,3 @@ export class QueryStringHelper {
     }
 
 }
-
-RegExpIOCHelper.register(QueryStringHelper)

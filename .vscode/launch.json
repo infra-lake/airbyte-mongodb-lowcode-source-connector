@@ -13,6 +13,6 @@
             "localRoot": "${workspaceFolder}",
             "remoteRoot": "/opt/app",
             "restart": true
-        }
+        },
     ]
 }
