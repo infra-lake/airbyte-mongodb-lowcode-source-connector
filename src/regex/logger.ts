@@ -12,7 +12,7 @@ export class Logger {
     }
 
     public static from(request: Request) {
-        return request.logger
+        return request.logger as Logger
     }
 
     public get transaction() { return this._transaction  }
