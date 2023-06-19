@@ -1,8 +1,7 @@
-import { CountDocumentsOptions, Document, Filter, FindOptions, MongoClient, Sort } from 'mongodb'
+import { CountDocumentsOptions, Document, Filter, FindOptions, ListCollectionsOptions, ListDatabasesOptions, MongoClient, Sort } from 'mongodb'
 import qs from 'qs'
+import Stream from 'stream'
 import { Logger, Regex, RegexController, Request, Response } from '../regex'
-import { AuthHelper } from '../helpers/auth.helper'
-import { NotFoundController } from './notfound.controller'
 
 export class ExportController implements RegexController {
 
@@ -12,18 +11,19 @@ export class ExportController implements RegexController {
 
         try {
 
-            if (!AuthHelper.validate(request)) {
-                const controller = Regex.inject(NotFoundController)
-                await controller.handle(request, response)
-                return
-            }
+            // if (!AuthHelper.validate(request)) {
+            //     const controller = Regex.inject(NotFoundController)
+            //     await controller.handle(request, response)
+            //     return
+            // }
 
             const input = _input(request)
             const filter = _filter(input)
             const metadata = await _metadata(input, filter)
 
             let count = 0
-            _find(input, filter)
+
+            const result = _find(input, filter)
                 .on('resume', () => {
                     response.setHeader('Content-Type', 'application/json')
                     response.write(`{ "metadata": ${metadata}, "results": [`)
@@ -57,8 +57,8 @@ export class ExportController implements RegexController {
 }
 
 type Path = {
-    database: string
-    collection: string
+    database?: string
+    collection?: string
 }
 type SeachIndexMode = 'offset' | 'page'
 type SearchIndex = {
@@ -155,7 +155,7 @@ function _decoder(value: string, defaultDecoder: qs.defaultDecoder, charset: str
 
 type ExportFilter<T extends Document> = {
     value: Filter<T>,
-    options: CountDocumentsOptions | FindOptions<T>
+    options: ListDatabasesOptions | ListCollectionsOptions | CountDocumentsOptions | FindOptions<T>
 }
 function _filter<T extends Document>({ parameters }: ExporterInput<T>): ExportFilter<T> {
     const { projection, filter, sort, limit, index } = parameters
@@ -179,10 +179,16 @@ async function _metadata<T extends Document>(input: ExporterInput<T>, filter: Ex
         input.parameters.index.mode === 'offset'
             ? input.parameters.index.value / input.parameters.limit
             : input.parameters.index.value
-    const previous = await _previous(input, filter, count)
-    const next = await _next(input, filter, count)
 
-    return JSON.stringify({ index, count, previous, next })
+    const result: any = { index, count }
+
+    if (input.path.database !== null && input.path.database !== undefined &&
+        input.path.collection !== null && input.path.collection !== undefined) {
+        result.previous = await _previous(input, filter, count)
+        result.next = await _next(input, filter, count)
+    }
+
+    return JSON.stringify(result)
 
 }
 
@@ -194,7 +200,7 @@ function _previous<T extends Document>(input: ExporterInput<T>, filter: ExportFi
     const value =
         count < 0
             ? false
-            : (filter.options.skip ?? 0) > 0
+            : ((filter?.options as any)?.skip ?? 0) > 0
 
     const token =
         index.mode === 'offset'
@@ -235,7 +241,7 @@ async function _next<T extends Document>(input: ExporterInput<T>, filter: Export
     const value =
         count < limit
             ? false
-            : await _count(input, { ...filter, options: { ...filter.options, limit: 1, skip: limit + (filter.options.skip ?? 0) } }) > 0
+            : await _count(input, { ...filter, options: { ...filter.options, limit: 1, skip: limit + ((filter?.options as any)?.skip ?? 0) } }) > 0
 
     const token =
         index.mode === 'offset'
@@ -277,15 +283,69 @@ function _encoder(value: any, defaultEncoder: qs.defaultEncoder, charset: string
 
 }
 
-async function _count<T extends Document>({ path }: ExporterInput<T>, { value, options }: ExportFilter<T>): Promise<number> {
+async function _count<T extends Document>({ path }: ExporterInput<T>, filter: ExportFilter<T>): Promise<number> {
+
     const mongodb = Regex.inject(MongoClient)
     const { database, collection } = path
-    const result = await mongodb.db(database).collection(collection).countDocuments(value, options)
-    return result
+
+    if ((database === null || database === undefined) &&
+        (collection === null || collection === undefined)) {
+        const { options } = filter
+        const result = await mongodb.db().admin().listDatabases(options)
+        return result.databases.length
+    }
+
+    if (collection === null || collection === undefined) {
+        const { options } = filter
+        const result = await mongodb.db(database).collections(options)
+        return result.length
+    }
+
+    if (database !== null && database !== undefined &&
+        collection !== null && collection !== undefined &&
+        filter !== null && filter !== undefined) {
+        const { value, options } = filter
+        const result = await mongodb.db(database).collection(collection).countDocuments(value, options)
+        return result
+    }
+
+    throw new Error(`database of collection ${collection} must be informed!`)
+
 }
 
-function _find<T extends Document>({ path }: ExporterInput<T>, { value, options }: ExportFilter<T>) {
+function _find<T extends Document>({ path }: ExporterInput<T>, filter: ExportFilter<T>) {
+
     const mongodb = Regex.inject(MongoClient)
     const { database, collection } = path
-    return mongodb.db(database).collection(collection).find(value as T, options).stream()
+
+    if ((database === null || database === undefined) &&
+        (collection === null || collection === undefined)) {
+        const { options } = filter
+        const stream = new Stream.Readable({ read() { }, objectMode: true })
+        mongodb.db().admin().listDatabases(options)
+            .then(result => result.databases.forEach(({ name }) => stream.push({ name })))
+            .catch(error => stream.destroy(error))
+            .finally(() => stream.push(null))
+        return stream
+    }
+
+    if (collection === null || collection === undefined) {
+        const { options } = filter
+        const stream = new Stream.Readable({ read() { }, objectMode: true })
+        mongodb.db(database).collections(options)
+            .then(collections => collections.forEach(({ dbName, collectionName }) => stream.push({ database: dbName, name: collectionName })))
+            .catch(error => stream.destroy(error))
+            .finally(() => stream.push(null))
+        return stream
+    }
+
+    if (database !== null && database !== undefined &&
+        collection !== null && collection !== undefined &&
+        filter !== null && filter !== undefined) {
+        const { value, options } = filter
+        return mongodb.db(database).collection(collection).find(value as T, options).stream()
+    }
+
+    throw new Error(`database of collection ${collection} must be informed!`)
+
 }
