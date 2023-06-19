@@ -27,14 +27,8 @@ export class Regex {
         const instances =
             Object
                 .keys(Regex.instances)
-                .filter(regex => {
-                    const result = text.match(regex) ?? text === regex
-                    return result
-                })
-                .map(key => {
-                    const result = Regex.instances[key]
-                    return result
-                })
+                .filter(regex => text.match(regex) ?? text === regex)
+                .map(key => Regex.instances[key])
 
         const result =
             instances.length > 1
