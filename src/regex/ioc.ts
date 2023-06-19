@@ -22,13 +22,19 @@ export class Regex {
         const text: string =
             typeof key === 'string'
                 ? key
-                : (key as any).regex ?? key.name
+                : (key as any)[RegexField.REGEX]
 
         const instances =
             Object
                 .keys(Regex.instances)
-                .filter(regex => text.match(regex))
-                .map(key => Regex.instances[key])
+                .filter(regex => {
+                    const result = text.match(regex) ?? text === regex
+                    return result
+                })
+                .map(key => {
+                    const result = Regex.instances[key]
+                    return result
+                })
 
         const result =
             instances.length > 1
@@ -37,7 +43,7 @@ export class Regex {
                     ? instances[0]
                     : undefined
 
-        if (result.length > 1 && !result[RegexField.MULTIPLE]) {
+        if (Array.isArray(result) && result.length > 1 && result.filter(instance => instance[RegexField.MULTIPLE]).length < 0) {
             throw Error(`there are two instances competing to regex ${text}, but all instances are not allowed to be multiple`)
         }
 
