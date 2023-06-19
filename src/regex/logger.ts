@@ -3,7 +3,7 @@ import { Request } from './app'
 
 export class Logger {
 
-    public static get id() { return '{random}' }
+    public static get regex() { return '{random}' }
 
     private _transaction?: string
 

@@ -13,10 +13,10 @@ MetricHelper.config()
 
 Regex.register(MongoClient, EnvironmentHelper.get('MONGODB_URI'))
 
-Regex.register(NotFoundController)
-Regex.register(HealthController)
-Regex.register(MetricsController)
-Regex.register(ExportController)
+Regex.controller(NotFoundController)
+Regex.controller(HealthController)
+Regex.controller(MetricsController)
+Regex.controller(ExportController)
 
 RegexApplication.create({
     startup: (server: Server) => {
