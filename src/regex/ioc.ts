@@ -94,7 +94,7 @@ export class Regex {
 
         type[RegexField.REGEX] =
             type.regex === '{random}'
-                ? `^${type[RegexField.ID]}$`
+                ? type[RegexField.ID]
                 : type.regex ?? `^${type.name}$`
 
         type[RegexField.TYPE] = type.name
@@ -132,7 +132,7 @@ export class Regex {
     }
 
     private static random(object: any): boolean {
-        return 'id' in object && object.regex === '{random}'
+        return 'regex' in object && object.regex === '{random}'
     }
 
     public static unregister<T>(key: RegexpKey<T> | any) {
