@@ -7,7 +7,7 @@ export class MetricsController implements RegexController {
 
     async get(request: Request, response: Response) {
         response.setHeader('Content-Type', MetricHelper.contentType)
-        response.statusCode = 200
+        response.setStatusCode(200)
         response.write(await MetricHelper.payload())
         response.end()
     }

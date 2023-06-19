@@ -11,11 +11,11 @@ export class ExportController implements RegexController {
 
         try {
 
-            // if (!AuthHelper.validate(request)) {
-            //     const controller = Regex.inject(NotFoundController)
-            //     await controller.handle(request, response)
-            //     return
-            // }
+            if (!AuthHelper.validate(request)) {
+                const controller = Regex.inject(NotFoundController)
+                await controller.handle(request, response)
+                return
+            }
 
             const input = _input(request)
             const filter = _filter(input)
@@ -27,7 +27,7 @@ export class ExportController implements RegexController {
                 .on('resume', () => {
                     response.setHeader('Content-Type', 'application/json')
                     response.write(`{ "metadata": ${metadata}, "results": [`)
-                    response.statusCode = 200
+                    response.setStatusCode(200)
                 })
                 .on('data', chunk => {
                     if (++count > 1) {
@@ -41,14 +41,14 @@ export class ExportController implements RegexController {
                 })
                 .on('error', (error) => {
                     console.error('error:', error)
-                    response.statusCode = 500
+                    response.setStatusCode(500)
                     response.end()
                 })
 
         } catch (error) {
             const logger = Logger.from(request)
             logger.error('error:', error)
-            response.statusCode = 500
+            response.setStatusCode(500)
             response.end()
         }
 

@@ -3,6 +3,7 @@ import { RegexField, Regex } from './ioc.js'
 import { Logger } from './logger.js'
 import { MetricHelper } from '../helpers/metric.helper.js'
 import { NotFoundController } from '../controllers/notfound.controller.js'
+import { ResilienceHelper } from '../helpers/resilience.helper.js'
 
 
 export interface Request extends IncomingMessage { 
@@ -10,7 +11,9 @@ export interface Request extends IncomingMessage {
     getURL(): URL
 }
 
-export interface Response extends ServerResponse { }
+export interface Response extends ServerResponse {
+    setStatusCode(value: number): void
+ }
 
 export type ControllerHandler = (request: Request, response: Response) => Promise<void> | void
 
@@ -29,7 +32,14 @@ async function listener(incomeMessage: IncomingMessage, serverResponse: ServerRe
     request.logger = Regex.register(Logger)
     request.getURL = () => new URL(request.url as string, `http://${request.headers.host}`)
 
-    const response = serverResponse as any as ServerResponse
+    const response = serverResponse as any as Response
+    response.setStatusCode = value =>  {
+        if (value === 423 || value === 429 || value >= 500) {
+            ResilienceHelper.increment()
+            response.setHeader('Retry-After', ResilienceHelper.backoff())
+        }
+        response.statusCode = value
+    }
         
     try {
 
@@ -48,7 +58,7 @@ async function listener(incomeMessage: IncomingMessage, serverResponse: ServerRe
         if (Array.isArray(controller)) {
             const controllers = controller.map(({ [RegexField.TYPE]: name }) => name)
             request.logger.error('there are more than one controller found:', controllers)
-            response.statusCode = 500
+            response.setStatusCode(500)
             response.end()
             return
         }
@@ -72,7 +82,7 @@ async function listener(incomeMessage: IncomingMessage, serverResponse: ServerRe
         await handler(request, response)
 
     } catch (error) {
-        response.statusCode = 500
+        response.setStatusCode(500)
         response.end()
         request.logger.error('error:', error)
     } finally {

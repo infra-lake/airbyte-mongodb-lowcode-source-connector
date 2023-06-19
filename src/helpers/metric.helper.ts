@@ -1,4 +1,4 @@
-import { collectDefaultMetrics, register, Counter } from 'prom-client'
+import { collectDefaultMetrics, register, Counter, Gauge } from 'prom-client'
 import { EnvironmentHelper } from './environment.helper'
 
 export class MetricHelper {
@@ -10,8 +10,13 @@ export class MetricHelper {
         help: 'Total of Received HTTP Requests',
         labelNames: [ 'path', 'status' ]
     })
-    
     static get http_received_request_total() { return MetricHelper._http_received_request_total }
+
+    private static _service_exponential_backoff_total = new Gauge({
+        name: 'service_exponential_backoff_total',
+        help: 'Exponential Backoff of Service'
+    })
+    static get service_exponential_backoff_total() { return MetricHelper._service_exponential_backoff_total }
 
     static config() {
 
