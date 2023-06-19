@@ -1,4 +1,5 @@
 import { CountDocumentsOptions, Document, Filter, FindOptions, MongoClient, Sort } from 'mongodb'
+import qs from 'qs'
 import { Logger, Regex, RegexController, Request, Response } from '../regex'
 
 export class ExportController implements RegexController {
@@ -9,11 +10,11 @@ export class ExportController implements RegexController {
 
         try {
 
-            // if (!AuthHelper.validate(request)) {
-            //     const controller = Regex.inject(NotFoundController)
-            //     await controller.handle(request, response)
-            //     return
-            // }
+            if (!AuthHelper.validate(request)) {
+                const controller = Regex.inject(NotFoundController)
+                await controller.handle(request, response)
+                return
+            }
 
             const input = _input(request)
             const filter = _filter(input)
@@ -75,91 +76,79 @@ type ExporterInput<T extends Document> = {
 }
 function _input<T extends Document>(request: Request): ExporterInput<T> {
 
-    const { searchParams, pathname } = request.getURL()
+    const { searchParams, pathname, } = request.getURL()
     const [_, database, collection, hash] = pathname.split('/').filter(value => value)
 
-    if (hash !== null && hash !== undefined) {
-        const parameters = JSON.parse(Buffer.from(hash, 'base64').toString('utf-8'))
-        return {
-            path: { database, collection },
-            parameters
-        }
-    }
+    const parameters =
+        hash !== null && hash !== undefined
+            ? _parameters(Buffer.from(hash, 'base64').toString('utf-8'))
+            : _parameters(searchParams.toString())
 
-    const sort = _object(searchParams.getAll('sort'))
-    const filter = _object(searchParams.getAll('filter'))
-    const projection = _object(searchParams.getAll('projection'))
-
-    const limit = parseInt(searchParams.get('limit') ?? '10')
-
-    const mode = (searchParams.get('mode') ?? 'offset') === 'offset' ? 'offset' : 'page'
-    const value = parseInt((mode === 'offset' ? searchParams.get('offset') : searchParams.get('page')) ?? '0')
-
-    const parameters: QueryParameters<T> = { projection, filter, sort, limit, index: { mode, value } }
     return { path: { database, collection }, parameters }
 
 }
 
-function _object(array: string[]): any {
-    const result = array
-        .map(param => param.replace(":","~^").split('~^'))
-        .reduce((projection: any, [key, value]) => {
+function _parameters(value: string): any {
 
-            if (value.startsWith('[') && value.endsWith(']')) {
-                const temp = value.substring(1, value.length - 1)
-                const inner = temp.match(/\[.*\]/g) ?? []
-                if (inner.length > 0) {
-                    const outer = inner.map(match => temp.replace(match, '')).flatMap(value => value.split(',').filter(value => value)).map(value => _object([value]))
-                    return [...inner.map(_value), ...outer]
-                }
-                projection[key] = temp.split(',').filter(value => value).map(value => _object([value]))
-                return projection
-            }
+    const parameters = qs.parse(value, { decoder: _decoder, charset: 'utf-8' }) as any
 
-            return key.split('.').reduce((_projection: any, key, index, { length }) => {
-                const last = index === (length - 1)
-                if (!(key in _projection)) {
-                    _projection[key] = last ? _value(value) : {}
-                } else if (last) {
-                    if (Array.isArray(_projection[key])) {
-                        _projection[key].push(_value(value))
-                    } else {
-                        _projection[key] = [_projection[key], _value(value)]
-                    }
-                }
-                return last ? projection : _projection[key]
-            }, projection)
-        }, {})
-    return Object.keys(result).length > 0 ? result : undefined
+    parameters.limit = parameters.limit ?? 10
+
+    parameters.mode = parameters.mode ?? 'offset'
+
+    parameters.index =
+        parameters.mode === 'offset'
+            ? { mode: 'offset', value: parameters.offset ?? 0 }
+            : { mode: 'page', value: parameters.page ?? 0 }
+
+    delete parameters.mode
+    delete parameters.offset
+    delete parameters.page
+
+    return parameters
+
 }
 
-function _value(value: string): number | string | boolean | Array<any> {
+function _decoder(value: string, defaultDecoder: qs.defaultDecoder, charset: string, type: 'key' | 'value'): number | string | boolean | Array<any> {
+
     try {
+
+        if (type === 'key') {
+            return defaultDecoder(value, _decoder, charset)
+        }
+
+        if (value.startsWith('\'') && value.endsWith('\'')) {
+            return value.substring(1, value.length - 1)
+        }
 
         if (value.startsWith('"') && value.endsWith('"')) {
             return value.substring(1, value.length - 1)
+        }
+
+        if (value.includes('%22')) {
+            return value.replaceAll('%22', '')
+        }
+
+        if (value.includes('%27')) {
+            return value.replaceAll('%27', '')
         }
 
         const result = Number(value)
         if (Number.isNaN(result)) {
             throw new Error()
         }
+
         return result
+
     } catch (error) {
+
         if (value.trim() === "true" || value.trim() === "false") {
             return value.trim() === "true"
         }
-        if (value.startsWith("[") && value.endsWith("]")) {
-            const temp = value.substring(1, value.length - 1)
-            const inner = temp.match(/\[.*\]/g) ?? []
-            if (inner.length > 0) {
-                const outer = inner.map(match => temp.replace(match, '')).flatMap(value => value.split(',').filter(value => value)).map(_value)
-                return [...inner.map(_value), ...outer]
-            }
-            return temp.split(',').filter(value => value).map(_value)
-        }
+
         return value
     }
+
 }
 
 type ExportFilter<T extends Document> = {
@@ -207,8 +196,30 @@ function _previous<T extends Document>(input: ExporterInput<T>, filter: ExportFi
 
     const token =
         index.mode === 'offset'
-            ? value ? _token({ projection, filter: _filter, sort, limit, index: { mode: index.mode, value: index.value - limit } }) : null
-            : value ? _token({ projection, filter: _filter, sort, limit, index: { mode: index.mode, value: index.value - 1 } }) : null
+            ? value
+                ? _token({
+                    projection,
+                    filter: _filter,
+                    sort,
+                    limit,
+                    index: {
+                        mode: index.mode,
+                        value: (index.value - limit) < 0 ? 0 : (index.value - limit)
+                    }
+                })
+                : null
+            : value
+                ? _token({
+                    projection,
+                    filter: _filter,
+                    sort,
+                    limit,
+                    index: {
+                        mode: index.mode,
+                        value: (index.value - 1) < 0 ? 0 : (index.value - 1)
+                    }
+                })
+                : null
 
     return { value, token }
 
@@ -234,7 +245,34 @@ async function _next<T extends Document>(input: ExporterInput<T>, filter: Export
 }
 
 function _token<T extends Document>(parameters: QueryParameters<T>): string {
-    return Buffer.from(JSON.stringify(parameters), 'utf-8').toString('base64')
+
+    (parameters as any).mode = parameters.index.mode
+    if (parameters.index.mode === 'offset') {
+        (parameters as any).offset = parameters.index.value
+    } else {
+        (parameters as any).page = parameters.index.value
+    }
+    delete (parameters as any).index
+
+    return Buffer.from(qs.stringify(parameters, { encoder: _encoder, encodeValuesOnly: true, charset: 'utf-8' }), 'utf-8').toString('base64')
+}
+
+function _encoder(value: any, defaultEncoder: qs.defaultEncoder, charset: string, type: "value" | "key"): string {
+
+    if (type === 'key') {
+        return defaultEncoder(value, _encoder, charset)
+    }
+
+    if (typeof value === 'string') {
+        const result = Number(value)
+        if (!Number.isNaN(result)) {
+            return `'${value}'`
+        }
+
+    }
+
+    return defaultEncoder(value, charset)
+
 }
 
 async function _count<T extends Document>({ path }: ExporterInput<T>, { value, options }: ExportFilter<T>): Promise<number> {
