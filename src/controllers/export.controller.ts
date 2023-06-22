@@ -143,18 +143,22 @@ function _decoder(value: string, defaultDecoder: qs.defaultDecoder, charset: str
         }
 
         if ((value.startsWith('ISODate'))) {
+            
             const text = defaultDecoder(value, _decoder, charset)
             const input = text.substring('ISODate'.length + 2, text.length - 2)
             const model = '0000-00-00T00:00:00.000Z'
+
             if (input.length > model.length) {
                 throw new BadRequestError(`invalid date: "${text}"`)
             }
+
             try {
                 const result = new Date(`${input}${model.substring(input.length)}`)
                 return result as any
             } catch (error) {
                 throw new BadRequestError(`invalid date: "${text}"`)
             }
+
         }
 
         const result = Number(value)
