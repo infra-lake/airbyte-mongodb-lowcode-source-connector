@@ -1,4 +1,3 @@
-import { BadRequestError } from "../exceptions/badrequest.error";
 import { Request, Response } from "../regex";
 import { EnvironmentHelper } from "./environment.helper";
 
@@ -22,7 +21,9 @@ export class AuthHelper {
             return result
         }
 
-        throw new BadRequestError(`auth mode ${mode} does not provided yet`)
+        response.setStatusCode(401)
+        response.end()
+        return false
 
     }
 

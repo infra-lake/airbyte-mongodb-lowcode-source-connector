@@ -23,10 +23,13 @@ export class ResilienceHelper {
             now.getDate(),
             now.getHours(),
             now.getMinutes(),
-            now.getSeconds() * (2 ** errors)
+            now.getSeconds(),
+            now.getMilliseconds() * (2 ** errors)
         )
         
-        return future.getTime() - now.getTime()
+        const result = (future.getTime() - now.getTime()) / 1000
+
+        return result < 1 ? 1 : parseInt(result.toString())
 
     }
 

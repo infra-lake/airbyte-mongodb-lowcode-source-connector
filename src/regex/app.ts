@@ -34,7 +34,7 @@ async function listener(incomeMessage: IncomingMessage, serverResponse: ServerRe
 
     const response = serverResponse as any as Response
     response.setStatusCode = value =>  {
-        if (value === 423 || value === 429 || value >= 500) {
+        if (value === 401 || value === 423 || value === 429 || value >= 500) {
             ResilienceHelper.increment()
             response.setHeader('Retry-After', ResilienceHelper.backoff())
         }
