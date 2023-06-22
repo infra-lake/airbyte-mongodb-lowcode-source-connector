@@ -1,8 +1,9 @@
 import { CountDocumentsOptions, Document, Filter, FindOptions, ListCollectionsOptions, ListDatabasesOptions, MongoClient, Sort } from 'mongodb'
 import qs from 'qs'
 import Stream from 'stream'
-import { Logger, Regex, RegexController, Request, Response } from '../regex'
+import { BadRequestError } from '../exceptions/badrequest.error'
 import { AuthHelper } from '../helpers/auth.helper'
+import { Logger, Regex, RegexController, Request, Response } from '../regex'
 import { NotFoundController } from './notfound.controller'
 
 export class ExportController implements RegexController {
@@ -13,9 +14,7 @@ export class ExportController implements RegexController {
 
         try {
 
-            if (!AuthHelper.validate(request)) {
-                const controller = Regex.inject(NotFoundController)
-                await controller.handle(request, response)
+            if (!AuthHelper.validate(request, response)) {
                 return
             }
 
@@ -48,10 +47,20 @@ export class ExportController implements RegexController {
                 })
 
         } catch (error) {
+            
             const logger = Logger.from(request)
+            
             logger.error('error:', error)
-            response.setStatusCode(500)
+            
+            const bad = error instanceof BadRequestError
+            
+            response.setStatusCode(bad ? 400 : 500)
+            if (bad) {
+                response.write(error.message)
+            }
+
             response.end()
+        
         }
 
     }
@@ -121,36 +130,52 @@ function _decoder(value: string, defaultDecoder: qs.defaultDecoder, charset: str
             return defaultDecoder(value, _decoder, charset)
         }
 
-        if (value.startsWith('\'') && value.endsWith('\'')) {
-            return value.substring(1, value.length - 1)
+        if ((value.startsWith('\'') && value.endsWith('\'')) ||
+            (value.startsWith('"') && value.endsWith('"'))) {
+            const result = value.substring(1, value.length - 1)
+            return defaultDecoder(result, _decoder, charset)
         }
 
-        if (value.startsWith('"') && value.endsWith('"')) {
-            return value.substring(1, value.length - 1)
+        if ((value.startsWith('%22') && value.endsWith('%22')) ||
+            (value.startsWith('%27') && value.endsWith('%27'))) {
+            const result = value.substring(3, value.length - 3)
+            return defaultDecoder(result, _decoder, charset)
         }
 
-        if (value.includes('%22')) {
-            return value.replaceAll('%22', '')
-        }
-
-        if (value.includes('%27')) {
-            return value.replaceAll('%27', '')
+        if ((value.startsWith('ISODate'))) {
+            const text = defaultDecoder(value, _decoder, charset)
+            const input = text.substring('ISODate'.length + 2, text.length - 2)
+            const model = '0000-00-00T00:00:00.000Z'
+            if (input.length > model.length) {
+                throw new BadRequestError(`invalid date: "${text}"`)
+            }
+            try {
+                const result = new Date(`${input}${model.substring(input.length)}`)
+                return result as any
+            } catch (error) {
+                throw new BadRequestError(`invalid date: "${text}"`)
+            }
         }
 
         const result = Number(value)
         if (Number.isNaN(result)) {
-            throw new Error()
+            throw new Error(`invalid number: "${defaultDecoder(value, _decoder, charset)}"`)
         }
 
         return result
 
     } catch (error) {
 
+        if (error instanceof BadRequestError) {
+            throw error
+        }
+
         if (value.trim() === "true" || value.trim() === "false") {
             return value.trim() === "true"
         }
 
-        return value
+        return defaultDecoder(value, _decoder, charset)
+
     }
 
 }
