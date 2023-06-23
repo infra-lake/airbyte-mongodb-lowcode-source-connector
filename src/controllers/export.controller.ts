@@ -1,4 +1,4 @@
-import { CountDocumentsOptions, Document, Filter, FindOptions, ListCollectionsOptions, ListDatabasesOptions, MongoClient, Sort, ObjectId } from 'mongodb'
+import { CountDocumentsOptions, Document, Filter, FindOptions, ListCollectionsOptions, ListDatabasesOptions, MongoClient, ObjectId, Sort } from 'mongodb'
 import qs from 'qs'
 import Stream from 'stream'
 import { BadRequestError } from '../exceptions/badrequest.error'
@@ -128,8 +128,8 @@ function _filter<T extends Document>({ parameters, stamps, window }: ExporterCon
 
         (filter as any)['$expr'] = {
             $and: [
-                { $gt: [{ $ifNull: [`$${stamps.update}`, `$${stamps.insert}`, `ObjectId($${stamps.id}).getTimestamp()` ] }, window.begin] },
-                { $lte: [{ $ifNull: [`$${stamps.update}`, `$${stamps.insert}`, `ObjectId($${stamps.id}).getTimestamp()`] }, window.end] },
+                { $gt: [{ $ifNull: [`$${stamps.update}`, `$${stamps.insert}`, { $convert: { input: `$${stamps.id}`, to: "date" } }] }, window.begin] },
+                { $lte: [{ $ifNull: [`$${stamps.update}`, `$${stamps.insert}`, { $convert: { input: `$${stamps.id}`, to: "date" } }] }, window.end] },
             ]
         }
 
