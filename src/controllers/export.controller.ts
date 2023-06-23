@@ -1,4 +1,4 @@
-import { CountDocumentsOptions, Document, Filter, FindOptions, ListCollectionsOptions, ListDatabasesOptions, MongoClient, Sort } from 'mongodb'
+import { CountDocumentsOptions, Document, Filter, FindOptions, ListCollectionsOptions, ListDatabasesOptions, MongoClient, Sort, ObjectId } from 'mongodb'
 import qs from 'qs'
 import Stream from 'stream'
 import { BadRequestError } from '../exceptions/badrequest.error'
@@ -128,8 +128,8 @@ function _filter<T extends Document>({ parameters, stamps, window }: ExporterCon
 
         (filter as any)['$expr'] = {
             $and: [
-                { $gt: [{ $ifNull: [`$${stamps.update}`, `$${stamps.insert}`] }, window.begin] },
-                { $lte: [{ $ifNull: [`$${stamps.update}`, `$${stamps.insert}`] }, window.end] },
+                { $gt: [{ $ifNull: [`$${stamps.update}`, `$${stamps.insert}`, `ObjectId($${stamps.id}).getTimestamp()` ] }, window.begin] },
+                { $lte: [{ $ifNull: [`$${stamps.update}`, `$${stamps.insert}`, `ObjectId($${stamps.id}).getTimestamp()`] }, window.end] },
             ]
         }
 
@@ -329,7 +329,8 @@ function _find<T extends Document>({ path }: ExporterControllerInput<T>, filter:
 }
 
 function _output<T extends Document>({ stamps }: ExporterControllerInput<T>, chunk: any) {
-    const { insert, update } = stamps
+    const { insert, update, id } = stamps
+    chunk[insert] = chunk[insert] ?? new ObjectId(chunk[id]).getTimestamp()
     chunk[update] = chunk[update] ?? chunk[insert]
     return chunk
 }

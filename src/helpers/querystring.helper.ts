@@ -1,5 +1,4 @@
 import qs from 'qs'
-import { Request } from '../regex'
 import { BadRequestError } from '../exceptions/badrequest.error'
 
 export class QueryStringHelper {
