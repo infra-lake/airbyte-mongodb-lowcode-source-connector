@@ -9,7 +9,7 @@ check:
 streams:
 {{#each streams}}
   - type: DeclarativeStream
-    name: payments
+    name: {{ this.name }}
     primary_key:
       - {{ ../stamps.id }}
     schema_loader:
