@@ -321,7 +321,7 @@ function _find<T extends Document>({ path }: ExporterControllerInput<T>, filter:
         collection !== null && collection !== undefined &&
         filter !== null && filter !== undefined) {
         const { value, options } = filter
-        return mongodb.db(database).collection(collection).find(value as T, options).stream()
+        return mongodb.db(database).collection(collection).find(value as T, options).allowDiskUse().stream()
     }
 
     throw new Error(`database of collection ${collection} must be informed!`)
