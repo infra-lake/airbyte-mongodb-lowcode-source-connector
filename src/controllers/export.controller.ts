@@ -3,8 +3,10 @@ import qs from 'qs'
 import Stream from 'stream'
 import { BadRequestError } from '../exceptions/badrequest.error'
 import { AuthHelper } from '../helpers/auth.helper'
+import { QueryStringHelper } from '../helpers/querystring.helper'
+import { Stamps, StampsHelper } from '../helpers/stamps.helper'
+import { Window, WindowHelper } from '../helpers/window.helper'
 import { Logger, Regex, RegexController, Request, Response } from '../regex'
-import { NotFoundController } from './notfound.controller'
 
 export class ExportController implements RegexController {
 
@@ -24,17 +26,21 @@ export class ExportController implements RegexController {
 
             let count = 0
 
-            const result = _find(input, filter)
+            _find(input, filter)
                 .on('resume', () => {
                     response.setHeader('Content-Type', 'application/json')
                     response.write(`{ "metadata": ${metadata}, "results": [`)
                     response.setStatusCode(200)
                 })
                 .on('data', chunk => {
+
                     if (++count > 1) {
                         response.write(',')
                     }
-                    response.write(JSON.stringify(chunk))
+
+                    const output = _output(input, chunk)
+                    response.write(JSON.stringify(output))
+
                 })
                 .on('end', () => {
                     response.write('] }')
@@ -47,20 +53,20 @@ export class ExportController implements RegexController {
                 })
 
         } catch (error) {
-            
+
             const logger = Logger.from(request)
-            
+
             logger.error('error:', error)
-            
+
             const bad = error instanceof BadRequestError
-            
+
             response.setStatusCode(bad ? 400 : 500)
             if (bad) {
                 response.write(error.message)
             }
 
             response.end()
-        
+
         }
 
     }
@@ -83,104 +89,27 @@ type QueryParameters<T extends Document> = {
     limit: number
     index: SearchIndex
 }
-type ExporterInput<T extends Document> = {
+type ExporterControllerInput<T extends Document> = {
     path: Path
     parameters: QueryParameters<T>
+    stamps: Stamps
+    window: Window
 }
-function _input<T extends Document>(request: Request): ExporterInput<T> {
+function _input<T extends Document>(request: Request): ExporterControllerInput<T> {
 
-    const { searchParams, pathname, } = request.getURL()
+    const { searchParams, pathname } = request.getURL()
     const [_, database, collection, hash] = pathname.split('/').filter(value => value)
 
     const parameters =
         hash !== null && hash !== undefined
-            ? _parameters(Buffer.from(hash, 'base64').toString('utf-8'))
-            : _parameters(searchParams.toString())
+            ? QueryStringHelper.parse(Buffer.from(hash, 'base64').toString('utf-8'))
+            : QueryStringHelper.parse(searchParams)
 
-    return { path: { database, collection }, parameters }
+    const stamps = StampsHelper.extract(parameters)
+    const window = WindowHelper.extract(parameters)
 
-}
 
-function _parameters(value: string): any {
-
-    const parameters = qs.parse(value, { decoder: _decoder, charset: 'utf-8' }) as any
-
-    parameters.limit = parameters.limit ?? 10
-
-    parameters.mode = parameters.mode ?? 'offset'
-
-    parameters.index =
-        parameters.mode === 'offset'
-            ? { mode: 'offset', value: parameters.offset ?? 0 }
-            : { mode: 'page', value: parameters.page ?? 0 }
-
-    delete parameters.mode
-    delete parameters.offset
-    delete parameters.page
-
-    return parameters
-
-}
-
-function _decoder(value: string, defaultDecoder: qs.defaultDecoder, charset: string, type: 'key' | 'value'): number | string | boolean | Array<any> {
-
-    try {
-
-        if (type === 'key') {
-            return defaultDecoder(value, _decoder, charset)
-        }
-
-        if ((value.startsWith('\'') && value.endsWith('\'')) ||
-            (value.startsWith('"') && value.endsWith('"'))) {
-            const result = value.substring(1, value.length - 1)
-            return defaultDecoder(result, _decoder, charset)
-        }
-
-        if ((value.startsWith('%22') && value.endsWith('%22')) ||
-            (value.startsWith('%27') && value.endsWith('%27'))) {
-            const result = value.substring(3, value.length - 3)
-            return defaultDecoder(result, _decoder, charset)
-        }
-
-        if ((value.startsWith('ISODate'))) {
-            
-            const text = defaultDecoder(value, _decoder, charset)
-            const input = text.substring('ISODate'.length + 2, text.length - 2)
-            const model = '0000-00-00T00:00:00.000Z'
-
-            if (input.length > model.length) {
-                throw new BadRequestError(`invalid date: "${text}"`)
-            }
-
-            try {
-                const result = new Date(`${input}${model.substring(input.length)}`)
-                return result as any
-            } catch (error) {
-                throw new BadRequestError(`invalid date: "${text}"`)
-            }
-
-        }
-
-        const result = Number(value)
-        if (Number.isNaN(result)) {
-            throw new Error(`invalid number: "${defaultDecoder(value, _decoder, charset)}"`)
-        }
-
-        return result
-
-    } catch (error) {
-
-        if (error instanceof BadRequestError) {
-            throw error
-        }
-
-        if (value.trim() === "true" || value.trim() === "false") {
-            return value.trim() === "true"
-        }
-
-        return defaultDecoder(value, _decoder, charset)
-
-    }
+    return { path: { database, collection }, parameters, stamps, window }
 
 }
 
@@ -188,10 +117,28 @@ type ExportFilter<T extends Document> = {
     value: Filter<T>,
     options: ListDatabasesOptions | ListCollectionsOptions | CountDocumentsOptions | FindOptions<T>
 }
-function _filter<T extends Document>({ parameters }: ExporterInput<T>): ExportFilter<T> {
-    const { projection, filter, sort, limit, index } = parameters
+function _filter<T extends Document>({ parameters, stamps, window }: ExporterControllerInput<T>): ExportFilter<T> {
+
+    const { projection, filter = {}, sort, limit, index } = parameters
     const options = { projection, sort, limit, skip: _skip({ limit, index }) }
-    return { value: filter, options }
+
+    if (window !== null && window !== undefined &&
+        window.begin !== null && window.begin !== undefined &&
+        window.end !== null && window.end !== undefined) {
+
+        (filter as any)['$expr'] = {
+            $and: [
+                { $gt: [{ $ifNull: [`$${stamps.update}`, `$${stamps.insert}`] }, window.begin] },
+                { $lte: [{ $ifNull: [`$${stamps.update}`, `$${stamps.insert}`] }, window.end] },
+            ]
+        }
+
+    }
+
+    const value = (Object.keys(filter).length > 0 ? filter : undefined) as any
+
+    return { value, options }
+
 }
 
 type SkipInput = { limit: number, index: SearchIndex }
@@ -202,7 +149,7 @@ function _skip({ limit, index }: SkipInput) {
     return result
 }
 
-async function _metadata<T extends Document>(input: ExporterInput<T>, filter: ExportFilter<T>) {
+async function _metadata<T extends Document>(input: ExporterControllerInput<T>, filter: ExportFilter<T>) {
 
     const count = await _count(input, filter)
 
@@ -223,7 +170,7 @@ async function _metadata<T extends Document>(input: ExporterInput<T>, filter: Ex
 
 }
 
-function _previous<T extends Document>(input: ExporterInput<T>, filter: ExportFilter<T>, count: number) {
+function _previous<T extends Document>(input: ExporterControllerInput<T>, filter: ExportFilter<T>, count: number) {
 
     const { parameters } = input
     const { projection, filter: _filter, sort, limit, index } = parameters
@@ -264,7 +211,7 @@ function _previous<T extends Document>(input: ExporterInput<T>, filter: ExportFi
 
 }
 
-async function _next<T extends Document>(input: ExporterInput<T>, filter: ExportFilter<T>, count: number) {
+async function _next<T extends Document>(input: ExporterControllerInput<T>, filter: ExportFilter<T>, count: number) {
 
     const { parameters } = input
     const { projection, filter: _filter, sort, limit, index } = parameters
@@ -314,7 +261,7 @@ function _encoder(value: any, defaultEncoder: qs.defaultEncoder, charset: string
 
 }
 
-async function _count<T extends Document>({ path }: ExporterInput<T>, filter: ExportFilter<T>): Promise<number> {
+async function _count<T extends Document>({ path }: ExporterControllerInput<T>, filter: ExportFilter<T>): Promise<number> {
 
     const mongodb = Regex.inject(MongoClient)
     const { database, collection } = path
@@ -344,7 +291,7 @@ async function _count<T extends Document>({ path }: ExporterInput<T>, filter: Ex
 
 }
 
-function _find<T extends Document>({ path }: ExporterInput<T>, filter: ExportFilter<T>) {
+function _find<T extends Document>({ path }: ExporterControllerInput<T>, filter: ExportFilter<T>) {
 
     const mongodb = Regex.inject(MongoClient)
     const { database, collection } = path
@@ -379,4 +326,10 @@ function _find<T extends Document>({ path }: ExporterInput<T>, filter: ExportFil
 
     throw new Error(`database of collection ${collection} must be informed!`)
 
+}
+
+function _output<T extends Document>({ stamps }: ExporterControllerInput<T>, chunk: any) {
+    const { insert, update } = stamps
+    chunk[update] = chunk[update] ?? chunk[insert]
+    return chunk
 }

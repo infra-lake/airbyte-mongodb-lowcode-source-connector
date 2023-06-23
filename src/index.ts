@@ -7,6 +7,7 @@ import { EnvironmentHelper } from './helpers/environment.helper'
 import { MetricHelper } from './helpers/metric.helper'
 import { Regex, RegexApplication, Server } from './regex'
 import { Logger } from './regex/logger'
+import { AirbyteController } from './controllers/airbyte/controller'
 
 EnvironmentHelper.config()
 MetricHelper.config()
@@ -17,6 +18,7 @@ Regex.controller(NotFoundController)
 Regex.controller(HealthController)
 Regex.controller(MetricsController)
 Regex.controller(ExportController)
+Regex.controller(AirbyteController)
 
 RegexApplication.create({
     startup: (server: Server) => {
