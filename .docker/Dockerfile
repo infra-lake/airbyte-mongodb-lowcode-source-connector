@@ -18,6 +18,7 @@ FROM base AS production-packages
 WORKDIR /opt/app/
 ADD ./package.json ./package.json
 ADD ./package-lock.json ./package-lock.json
+ADD ./tempates ./templates
 RUN npm ci --omit=dev
 COPY --from=build /opt/app/dist /opt/app/dist
 
@@ -27,4 +28,5 @@ COPY --from=production-packages /opt/app/package.json ./package.json
 COPY --from=production-packages /opt/app/package-lock.json ./package-lock.json
 COPY --from=production-packages /opt/app/node_modules ./node_modules
 COPY --from=production-packages /opt/app/dist ./dist
+COPY --from=production-packages /opt/app/templates ./templates
 CMD ["dist/index.js"]

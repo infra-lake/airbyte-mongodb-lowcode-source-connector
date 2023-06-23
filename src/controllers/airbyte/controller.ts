@@ -12,7 +12,7 @@ export class AirbyteController implements RegexController {
     static path = '^/airbyte'
 
     public constructor() {
-        fs.readdirSync('./src/controllers/airbyte/templates').forEach(_compile)
+        fs.readdirSync('./templates/airbyte').forEach(_compile)
         Handlebars.registerHelper('airbyteConfig', (name) => {
             return `'{{ config[''${name}''] }}'`
         })
@@ -65,7 +65,7 @@ function _compile(version: string) {
     if (version in _templates) {
         return _templates[version]
     }
-    const template = fs.readFileSync(`./src/controllers/airbyte/templates/${version}/template.hbs`).toString('utf-8') 
+    const template = fs.readFileSync(`./templates/airbyte/${version}/template.hbs`).toString('utf-8') 
     _templates[version] = Handlebars.compile(template, { noEscape: true })
     return _templates[version]
 }
