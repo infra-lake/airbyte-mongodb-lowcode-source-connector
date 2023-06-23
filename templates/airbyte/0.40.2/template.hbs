@@ -66,7 +66,7 @@ streams:
           inject_into: request_parameter
         pagination_strategy:
           type: PageIncrement
-          page_size: 10000
+          page_size: {{ ../stamps.limit }}
           start_from_page: 0
     incremental_sync:
       type: DatetimeBasedCursor
