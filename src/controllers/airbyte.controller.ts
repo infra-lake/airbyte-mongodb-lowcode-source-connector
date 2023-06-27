@@ -1,11 +1,13 @@
 import fs from 'fs'
 import Handlebars from 'handlebars'
 import { MongoClient } from 'mongodb'
-import { BadRequestError } from '../../exceptions/badrequest.error'
-import { AuthHelper } from '../../helpers/auth.helper'
-import { QueryStringHelper } from '../../helpers/querystring.helper'
-import { Stamps, StampsHelper } from '../../helpers/stamps.helper'
-import { Logger, Regex, RegexController, Request, Response } from '../../regex'
+import { BadRequestError } from '../exceptions/badrequest.error'
+import { AuthHelper } from '../helpers/auth.helper'
+import { MongoDBHelper } from '../helpers/mongodb.helper'
+import { ObjectHelper } from '../helpers/object.helper'
+import { QueryStringHelper } from '../helpers/querystring.helper'
+import { Stamps, StampsHelper } from '../helpers/stamps.helper'
+import { Logger, Regex, RegexController, Request, Response } from '../regex'
 
 export class AirbyteController implements RegexController {
 
@@ -30,8 +32,27 @@ export class AirbyteController implements RegexController {
             }
 
             const { path, stamps } = _input(request)
-            const { database, version } = path
-            
+            const { version, database } = path
+
+            if (!ObjectHelper.has(version)) {
+                const versions = Object.keys(_templates).map(version => ({ version }))
+                const output = { metadata: { count: versions.length }, results: versions }
+                response.write(JSON.stringify(output))
+                response.setStatusCode(200)
+                response.end()
+                return
+            }
+
+            if (!ObjectHelper.has(database)) {
+                const mongodb = Regex.inject(MongoDBHelper)
+                const databases = await mongodb.databases()
+                const output = { metadata: { count: databases.length }, results: databases.map(({ name }) => ({ name })) }
+                response.write(JSON.stringify(output))
+                response.setStatusCode(200)
+                response.end()
+                return
+            }
+
             const streams = await _streams(database)
             const output = _templates[version]?.({ streams, stamps })
 
@@ -65,7 +86,7 @@ function _compile(version: string) {
     if (version in _templates) {
         return _templates[version]
     }
-    const template = fs.readFileSync(`./templates/airbyte/${version}/template.hbs`).toString('utf-8') 
+    const template = fs.readFileSync(`./templates/airbyte/${version}/template.hbs`).toString('utf-8')
     _templates[version] = Handlebars.compile(template, { noEscape: true })
     return _templates[version]
 }
@@ -102,7 +123,7 @@ async function _streams(database: string): Promise<Array<AirbyteStream>> {
 
     const collections = await mongodb.db(database).collections()
 
-    const result =  collections.map(({ dbName: database, collectionName: name }) => ({ database, name }))
+    const result = collections.map(({ dbName: database, collectionName: name }) => ({ database, name }))
 
     return result
 }

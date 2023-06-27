@@ -1,10 +1,11 @@
-import { CountDocumentsOptions, Document, Filter, FindOptions, ListCollectionsOptions, ListDatabasesOptions, MongoClient, ObjectId, Sort } from 'mongodb'
-import qs from 'qs'
-import Stream from 'stream'
+import { CountDocumentsOptions, Document, Filter, FindOptions, ListCollectionsOptions, ListDatabasesOptions, ObjectId, Sort } from 'mongodb'
 import { BadRequestError } from '../exceptions/badrequest.error'
 import { AuthHelper } from '../helpers/auth.helper'
+import { MongoDBHelper } from '../helpers/mongodb.helper'
+import { ObjectHelper } from '../helpers/object.helper'
 import { QueryStringHelper } from '../helpers/querystring.helper'
 import { Stamps, StampsHelper } from '../helpers/stamps.helper'
+import { StreamHelper } from '../helpers/stream.helper'
 import { Window, WindowHelper } from '../helpers/window.helper'
 import { Logger, Regex, RegexController, Request, Response } from '../regex'
 
@@ -101,13 +102,12 @@ function _input<T extends Document>(request: Request): ExporterControllerInput<T
     const [_, database, collection, hash] = pathname.split('/').filter(value => value)
 
     const parameters =
-        hash !== null && hash !== undefined
+        ObjectHelper.has(hash)
             ? QueryStringHelper.parse(Buffer.from(hash, 'base64').toString('utf-8'))
             : QueryStringHelper.parse(searchParams)
 
     const stamps = StampsHelper.extract(parameters)
     const window = WindowHelper.extract(parameters)
-
 
     return { path: { database, collection }, parameters, stamps, window }
 
@@ -122,17 +122,16 @@ function _filter<T extends Document>({ parameters, stamps, window }: ExporterCon
     const { projection, filter = {}, sort, limit, index } = parameters
     const options = { projection, sort, limit, skip: _skip({ limit, index }) }
 
-    if (window !== null && window !== undefined &&
-        window.begin !== null && window.begin !== undefined &&
-        window.end !== null && window.end !== undefined) {
+    if (ObjectHelper.has(window.begin)) {
+        (filter as any)['$expr'] = (filter as any)['$expr'] ?? {} as any
+        (filter as any)['$expr']['$and'] = (filter as any)['$expr']['$and'] ?? [] as any
+        (filter as any)['$expr']['$and'].push({ $gt: [{ $ifNull: [`$${stamps.update}`, `$${stamps.insert}`, { $convert: { input: `$${stamps.id}`, to: "date" } }] }, window.begin] })
+    }
 
-        (filter as any)['$expr'] = {
-            $and: [
-                { $gt: [{ $ifNull: [`$${stamps.update}`, `$${stamps.insert}`, { $convert: { input: `$${stamps.id}`, to: "date" } }] }, window.begin] },
-                { $lte: [{ $ifNull: [`$${stamps.update}`, `$${stamps.insert}`, { $convert: { input: `$${stamps.id}`, to: "date" } }] }, window.end] },
-            ]
-        }
-
+    if (ObjectHelper.has(window.end)) {
+        (filter as any)['$expr'] = (filter as any)['$expr'] ?? {} as any
+        (filter as any)['$expr']['$and'] = (filter as any)['$expr']['$and'] ?? [] as any
+        (filter as any)['$expr']['$and'].push({ $lte: [{ $ifNull: [`$${stamps.update}`, `$${stamps.insert}`, { $convert: { input: `$${stamps.id}`, to: "date" } }] }, window.end] })
     }
 
     const value = (Object.keys(filter).length > 0 ? filter : undefined) as any
@@ -160,8 +159,7 @@ async function _metadata<T extends Document>(input: ExporterControllerInput<T>, 
 
     const result: any = { index, count }
 
-    if (input.path.database !== null && input.path.database !== undefined &&
-        input.path.collection !== null && input.path.collection !== undefined) {
+    if (ObjectHelper.has(input.path.database) && ObjectHelper.has(input.path.collection)) {
         result.previous = await _previous(input, filter, count)
         result.next = await _next(input, filter, count)
     }
@@ -240,50 +238,30 @@ function _token<T extends Document>(parameters: QueryParameters<T>): string {
     }
     delete (parameters as any).index
 
-    return Buffer.from(qs.stringify(parameters, { encoder: _encoder, encodeValuesOnly: true, charset: 'utf-8' }), 'utf-8').toString('base64')
-}
-
-function _encoder(value: any, defaultEncoder: qs.defaultEncoder, charset: string, type: "value" | "key"): string {
-
-    if (type === 'key') {
-        return defaultEncoder(value, _encoder, charset)
-    }
-
-    if (typeof value === 'string') {
-        const result = Number(value)
-        if (!Number.isNaN(result)) {
-            return `'${value}'`
-        }
-
-    }
-
-    return defaultEncoder(value, charset)
+    return QueryStringHelper.stringify(parameters)
 
 }
 
 async function _count<T extends Document>({ path }: ExporterControllerInput<T>, filter: ExportFilter<T>): Promise<number> {
 
-    const mongodb = Regex.inject(MongoClient)
     const { database, collection } = path
 
-    if ((database === null || database === undefined) &&
-        (collection === null || collection === undefined)) {
-        const { options } = filter
-        const result = await mongodb.db().admin().listDatabases(options)
-        return result.databases.length
+    if (!ObjectHelper.has(database) && !ObjectHelper.has(collection)) {
+        const mongodb = Regex.inject(MongoDBHelper)
+        const databases = await mongodb.databases()
+        return databases.length
     }
 
-    if (collection === null || collection === undefined) {
-        const { options } = filter
-        const result = await mongodb.db(database).collections(options)
-        return result.length
+    if (!ObjectHelper.has(collection)) {
+        const mongodb = Regex.inject(MongoDBHelper)
+        const collections = await mongodb.collections(database as string)
+        return collections.length
     }
 
-    if (database !== null && database !== undefined &&
-        collection !== null && collection !== undefined &&
-        filter !== null && filter !== undefined) {
+    if (ObjectHelper.has(database) && ObjectHelper.has(collection)) {
+        const mongodb = Regex.inject(MongoDBHelper)
         const { value, options } = filter
-        const result = await mongodb.db(database).collection(collection).countDocuments(value, options)
+        const result = await mongodb.count(database as string, collection as string, value as any, options)
         return result
     }
 
@@ -293,35 +271,28 @@ async function _count<T extends Document>({ path }: ExporterControllerInput<T>, 
 
 function _find<T extends Document>({ path }: ExporterControllerInput<T>, filter: ExportFilter<T>) {
 
-    const mongodb = Regex.inject(MongoClient)
     const { database, collection } = path
 
-    if ((database === null || database === undefined) &&
-        (collection === null || collection === undefined)) {
-        const { options } = filter
-        const stream = new Stream.Readable({ read() { }, objectMode: true })
-        mongodb.db().admin().listDatabases(options)
-            .then(result => result.databases.forEach(({ name }) => stream.push({ name })))
-            .catch(error => stream.destroy(error))
-            .finally(() => stream.push(null))
-        return stream
+    if (!ObjectHelper.has(database) && !ObjectHelper.has(collection)) {
+        const mongodb = Regex.inject(MongoDBHelper)
+        return StreamHelper.create(mongodb.databases(), {
+            transform: (stream, databases) =>
+                databases.forEach(({ name }) => stream.push({ name }))
+        })
     }
 
-    if (collection === null || collection === undefined) {
-        const { options } = filter
-        const stream = new Stream.Readable({ read() { }, objectMode: true })
-        mongodb.db(database).collections(options)
-            .then(collections => collections.forEach(({ dbName, collectionName }) => stream.push({ database: dbName, name: collectionName })))
-            .catch(error => stream.destroy(error))
-            .finally(() => stream.push(null))
-        return stream
+    if (!ObjectHelper.has(collection)) {
+        const mongodb = Regex.inject(MongoDBHelper)
+        return StreamHelper.create(mongodb.collections(database as string), {
+            transform: (stream, collections) =>
+                collections.forEach(({ dbName: database, collectionName: name }) => stream.push({ database, name }))
+        })
     }
 
-    if (database !== null && database !== undefined &&
-        collection !== null && collection !== undefined &&
-        filter !== null && filter !== undefined) {
+    if (ObjectHelper.has(database) && ObjectHelper.has(collection)) {
         const { value, options } = filter
-        return mongodb.db(database).collection(collection).find(value as T, options).allowDiskUse().stream()
+        const mongodb = Regex.inject(MongoDBHelper)
+        return mongodb.find(database as string, collection as string, value as any, options)
     }
 
     throw new Error(`database of collection ${collection} must be informed!`)

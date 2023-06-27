@@ -1,6 +1,9 @@
+import { ObjectHelper } from "./object.helper"
+import { TypeHelper } from "./type.helper"
+
 export type Window = {
-    begin: any,
-    end: any
+    begin: Date,
+    end: Date
 }
 
 export class WindowHelper {
@@ -9,6 +12,9 @@ export class WindowHelper {
 
         const window = (object.__window ?? {}) as Window
         delete object.__window
+
+        window.begin = ObjectHelper.has(window?.begin) ? TypeHelper.toDate(window.begin as any) : window?.begin
+        window.end = ObjectHelper.has(window?.end) ? TypeHelper.toDate(window.end as any) : window?.end
 
         return window
 

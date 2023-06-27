@@ -71,7 +71,7 @@ streams:
     incremental_sync:
       type: DatetimeBasedCursor
       cursor_field: {{ ../stamps.update }}
-      datetime_format: ISODate("%Y-%m-%dT%H:%M:%S.000Z")
+      datetime_format: '%Y-%m-%dT%H:%M:%S.000Z'
       end_time_option:
         type: RequestOption
         field_name: __window[end]

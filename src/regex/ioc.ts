@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto'
+import { ObjectHelper } from '../helpers/object.helper'
 import { RegexController } from './app'
 
 export enum RegexField {
@@ -121,14 +122,18 @@ export class Regex {
     }
 
     private static marked(object: any): boolean {
-        return RegexField.REGEX in object && object[RegexField.REGEX] !== null && object[RegexField.REGEX] !== undefined &&
-            RegexField.ID in object && object[RegexField.ID] !== null && object[RegexField.ID] !== undefined &&
-            RegexField.TYPE in object && object[RegexField.TYPE] !== null && object[RegexField.TYPE] !== undefined &&
-            RegexField.MULTIPLE in object && object[RegexField.MULTIPLE] !== null && object[RegexField.MULTIPLE] !== undefined
+
+        const result =
+            ObjectHelper.has(object?.[RegexField.REGEX]) &&
+            ObjectHelper.has(object?.[RegexField.ID]) &&
+            ObjectHelper.has(object?.[RegexField.TYPE]) &&
+            ObjectHelper.has(object?.[RegexField.MULTIPLE])
+
+        return result
     }
 
     private static exists(stamp: string): boolean {
-        return stamp in Regex && Regex.instances[stamp] !== null && Regex.instances[stamp] !== undefined
+        return ObjectHelper.has(Regex.instances?.[stamp])
     }
 
     private static random(object: any): boolean {

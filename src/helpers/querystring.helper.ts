@@ -1,5 +1,6 @@
 import qs from 'qs'
 import { BadRequestError } from '../exceptions/badrequest.error'
+import { TypeHelper } from './type.helper'
 
 export class QueryStringHelper {
 
@@ -69,15 +70,9 @@ export class QueryStringHelper {
 
                 const text = defaultDecoder(value, QueryStringHelper.decoder, charset)
                 const input = text.substring('ISODate'.length + 2, text.length - 2)
-                
-                const model = '0000-01-01T00:00:00.000Z'
-
-                if (input.length > model.length) {
-                    throw new BadRequestError(`invalid date: "${text}"`)
-                }
 
                 try {
-                    const result = new Date(`${input}${model.substring(input.length)}`)
+                    const result = TypeHelper.toDate(input)
                     return result as any
                 } catch (error) {
                     throw new BadRequestError(`invalid date: "${text}"`)
@@ -85,12 +80,8 @@ export class QueryStringHelper {
 
             }
 
-            const result = Number(value)
-            if (Number.isNaN(result)) {
-                throw new Error(`invalid number: "${defaultDecoder(value, QueryStringHelper.decoder, charset)}"`)
-            }
 
-            return result
+            return TypeHelper.toNumber(value)
 
         } catch (error) {
 
@@ -105,6 +96,32 @@ export class QueryStringHelper {
             return defaultDecoder(value, QueryStringHelper.decoder, charset)
 
         }
+
+    }
+
+
+    public static stringify(object: any): string {
+        const result = Buffer.from(qs.stringify(object, {
+            encoder: QueryStringHelper.encoder, encodeValuesOnly: true, charset: 'utf-8'
+        }), 'utf-8').toString('base64')
+        return result
+    }
+
+    private static encoder(value: any, defaultEncoder: qs.defaultEncoder, charset: string, type: "value" | "key"): string {
+
+        if (type === 'key') {
+            return defaultEncoder(value, QueryStringHelper.encoder, charset)
+        }
+
+        if (typeof value === 'string') {
+            try {
+                const result = TypeHelper.toNumber(value)    
+            } catch (error) {
+                return `'value'`
+            }
+        }
+
+        return defaultEncoder(value, charset)
 
     }
 

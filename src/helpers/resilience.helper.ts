@@ -1,4 +1,4 @@
-import { MetricHelper } from "./metric.helper"
+import { MetricHelper } from './metric.helper'
 
 let errors: number = 0
 

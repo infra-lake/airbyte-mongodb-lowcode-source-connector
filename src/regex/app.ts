@@ -4,6 +4,7 @@ import { Logger } from './logger.js'
 import { MetricHelper } from '../helpers/metric.helper.js'
 import { NotFoundController } from '../controllers/notfound.controller.js'
 import { ResilienceHelper } from '../helpers/resilience.helper.js'
+import { ObjectHelper } from '../helpers/object.helper.js'
 
 
 export interface Request extends IncomingMessage { 
@@ -65,15 +66,15 @@ async function listener(incomeMessage: IncomingMessage, serverResponse: ServerRe
 
         const method = request.method?.toLocaleLowerCase()
 
-        if (method === null || method === undefined) {
+        if (!ObjectHelper.has(method)) {
             const controller = Regex.inject<NotFoundController>('404')
             await controller.handle(request, response)
             return
         }
 
-        const handler = (controller as any)[method] ?? controller.handle
+        const handler = (controller as any)[method as string] ?? controller.handle
 
-        if (!controller) {
+        if (!ObjectHelper.has(handler)) {
             const controller = Regex.inject<NotFoundController>('404')
             await controller.handle(request, response)
             return
