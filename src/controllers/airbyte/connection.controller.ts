@@ -1,124 +1,74 @@
-// import fs from 'fs'
-// import Handlebars from 'handlebars'
-// import { MongoClient } from 'mongodb'
-// import { BadRequestError } from '../../exceptions/badrequest.error'
-// import { AirbyteTemplates } from '../../helpers/airbyte.helper'
-// import { AuthHelper } from '../../helpers/auth.helper'
-// import { MongoDBHelper } from '../../helpers/mongodb.helper'
-// import { ObjectHelper } from '../../helpers/object.helper'
-// import { QueryStringHelper } from '../../helpers/querystring.helper'
-// import { Logger, Regex, RegexController, Request, Response } from '../../regex'
+import { AirbyteHelper } from '../../helpers/airbyte.helper'
+import { ArrayHelper } from '../../helpers/array.helper'
+import { AuthHelper } from '../../helpers/auth.helper'
+import { ObjectHelper } from '../../helpers/object.helper'
+import { QueryStringHelper } from '../../helpers/querystring.helper'
+import { RegexController, Request, Response } from '../../regex'
 
-// export class AirbyteConnectionController implements RegexController {
+export class ConnectionAirbyteController implements RegexController {
 
-//     static path = '^/airbyte/connection'
+    public static readonly path = '^/airbyte/connection'
+    private static readonly templates = AirbyteHelper.templates('connection')
 
-//     public constructor() {
-//         fs.readdirSync(_templates.path()).forEach(_compile)
-//     }
+    public async get(request: Request, response: Response) {
 
-//     async get(request: Request, response: Response) {
+        if (!AuthHelper.validate(request, response)) {
+            return
+        }
 
-//         try {
+        const { path, parameters } = _input(request)
+        const { version, database } = path
 
-//             if (!AuthHelper.validate(request, response)) {
-//                 return
-//             }
+        if (!ObjectHelper.has(version)) {
+            const output = AirbyteHelper.versions(ConnectionAirbyteController.templates)
+            response.write(JSON.stringify(output))
+            response.setStatusCode(200)
+            response.end()
+            return
+        }
 
-//             const { path, parameters } = _input(request)
-//             const { version, database } = path
+        if (!ObjectHelper.has(database)) {
+            const output = await AirbyteHelper.databases()
+            response.write(JSON.stringify(output))
+            response.setStatusCode(200)
+            response.end()
+            return
+        }
 
-//             if (!ObjectHelper.has(version)) {
-//                 const versions = Object.keys(_templates).map(version => ({ version }))
-//                 const output = { metadata: { count: versions.length }, results: versions }
-//                 response.write(JSON.stringify(output))
-//                 response.setStatusCode(200)
-//                 response.end()
-//                 return
-//             }
+        const streams = await AirbyteHelper.streams(database, parameters)
+        const { split } = parameters
 
-//             if (!ObjectHelper.has(database)) {
-//                 const mongodb = Regex.inject(MongoDBHelper)
-//                 const databases = await mongodb.databases()
-//                 const output = { metadata: { count: databases.length }, results: databases.map(({ name }) => ({ name })) }
-//                 response.write(JSON.stringify(output))
-//                 response.setStatusCode(200)
-//                 response.end()
-//                 return
-//             }
+        ArrayHelper
+            .split(streams, split)
+            .forEach(streams => {
+                const output = ConnectionAirbyteController.templates[version]?.({ streams, parameters })
+                response.write(output)
+            })
 
-//             const streams = await _streams(database)
-//             const output = _templates[version]?.({ streams, stamps })
+        response.setStatusCode(200)
+        response.end()
 
-//             response.write(output)
-//             response.setStatusCode(200)
-//             response.end()
+    }
 
-//         } catch (error) {
+}
 
-//             const logger = Logger.from(request)
+type Path = {
+    version: string
+    database: string
+}
 
-//             logger.error('error:', error)
+type AirbyteControllerInput = {
+    path: Path
+    parameters: any
+}
 
-//             const bad = error instanceof BadRequestError
+function _input(request: Request): AirbyteControllerInput {
 
-//             response.setStatusCode(bad ? 400 : 500)
-//             if (bad) {
-//                 response.write(error.message)
-//             }
+    const { searchParams } = request.getURL()
+    const { version, database } = AirbyteHelper.path(request)
 
-//             response.end()
+    const parameters = QueryStringHelper.parse(searchParams)
 
-//         }
+    return { path: { version, database }, parameters }
 
-//     }
-
-// }
-
-// const _templates: AirbyteTemplates = {
-//     path: () => './templates/airbyte/connection'
-// }
-
-// function _compile(version: string) {
-//     if (version in _templates) {
-//         return _templates[version]
-//     }
-//     const template = fs.readFileSync(`${_templates.path()}/${version}/template.hbs`).toString('utf-8')
-//     _templates[version] = Handlebars.compile(template, { noEscape: true })
-//     return _templates[version]
-// }
-
-// type Path = {
-//     version: string
-//     database: string
-// }
-// type AirbyteControllerInput = {
-//     path: Path
-//     parameters: any
-// }
-
-// function _input(request: Request): AirbyteControllerInput {
-
-//     const { searchParams, pathname } = request.getURL()
-//     const [_, version, database] = pathname.split('/').filter(value => value)
-
-//     const parameters = QueryStringHelper.parse(searchParams)
-
-//     return { path: { version, database }, parameters }
-
-// }
-
-// type AirbyteStream = {
-//     database: string,
-//     name: string
-// }
-// async function _streams(database: string): Promise<Array<AirbyteStream>> {
-
-//     const mongodb = Regex.inject(MongoClient)
-
-//     const collections = await mongodb.db(database).collections()
-
-//     const result = collections.map(({ dbName: database, collectionName: name }) => ({ database, name }))
-
-//     return result
-// }
+}

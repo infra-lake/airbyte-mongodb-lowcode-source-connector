@@ -1,8 +1,8 @@
-import { Logger, RegexController, Request, Response } from '../regex'
+import { Logger, RegexController, Request, Response } from '../../regex'
 
 export class NotFoundController implements RegexController {
 
-    public static path = '^404$'
+    public static readonly path = '^404$'
 
     public async handle(request: Request, response: Response) {
         const logger = Logger.from(request)

@@ -16,7 +16,7 @@ export type RegexControler<T extends RegexController> = RegexClass<T> & { path: 
 
 export class Regex {
 
-    private static instances: { [key: string]: any } = {}
+    private static readonly instances: { [key: string]: any } = {}
 
     public static inject<T>(key: RegexpKey<T>): T {
 

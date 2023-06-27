@@ -2,9 +2,10 @@ import { createServer, Server as HTTPServer, IncomingMessage, ServerResponse } f
 import { RegexField, Regex } from './ioc.js'
 import { Logger } from './logger.js'
 import { MetricHelper } from '../helpers/metric.helper.js'
-import { NotFoundController } from '../controllers/notfound.controller.js'
+import { NotFoundController } from '../controllers/default/notfound.controller.js'
 import { ResilienceHelper } from '../helpers/resilience.helper.js'
 import { ObjectHelper } from '../helpers/object.helper.js'
+import { ControllerHelper } from '../helpers/controller.helper.js'
 
 
 export interface Request extends IncomingMessage { 
@@ -83,9 +84,7 @@ async function listener(incomeMessage: IncomingMessage, serverResponse: ServerRe
         await handler(request, response)
 
     } catch (error) {
-        response.setStatusCode(500)
-        response.end()
-        request.logger.error('error:', error)
+        ControllerHelper.catch(request, response, error)
     } finally {
         MetricHelper.http_received_request_total.inc({ status: response.statusCode })
         MetricHelper.http_received_request_total.inc({ path: request.getURL().pathname, status: response.statusCode })

@@ -1,5 +1,4 @@
 import { CountDocumentsOptions, Document, Filter, FindOptions, ListCollectionsOptions, ListDatabasesOptions, ObjectId, Sort } from 'mongodb'
-import { BadRequestError } from '../exceptions/badrequest.error'
 import { AuthHelper } from '../helpers/auth.helper'
 import { MongoDBHelper } from '../helpers/mongodb.helper'
 import { ObjectHelper } from '../helpers/object.helper'
@@ -7,69 +6,49 @@ import { QueryStringHelper } from '../helpers/querystring.helper'
 import { Stamps, StampsHelper } from '../helpers/stamps.helper'
 import { StreamHelper } from '../helpers/stream.helper'
 import { Window, WindowHelper } from '../helpers/window.helper'
-import { Logger, Regex, RegexController, Request, Response } from '../regex'
-import { TypeHelper } from '../helpers/type.helper'
+import { Regex, RegexController, Request, Response } from '../regex'
 
 export class ExportController implements RegexController {
 
-    static path = '^/export'
+    public static readonly path = '^/export'
 
     public async get(request: Request, response: Response) {
 
-        try {
-
-            if (!AuthHelper.validate(request, response)) {
-                return
-            }
-
-            const input = _input(request)
-            const filter = _filter(input)
-            const metadata = await _metadata(input, filter)
-
-            let count = 0
-
-            _find(input, filter)
-                .on('resume', () => {
-                    response.setHeader('Content-Type', 'application/json')
-                    response.write(`{ "metadata": ${metadata}, "results": [`)
-                    response.setStatusCode(200)
-                })
-                .on('data', chunk => {
-
-                    if (++count > 1) {
-                        response.write(',')
-                    }
-
-                    const output = _output(input, chunk)
-                    response.write(JSON.stringify(output))
-
-                })
-                .on('end', () => {
-                    response.write('] }')
-                    response.end()
-                })
-                .on('error', (error) => {
-                    console.error('error:', error)
-                    response.setStatusCode(500)
-                    response.end()
-                })
-
-        } catch (error) {
-
-            const logger = Logger.from(request)
-
-            logger.error('error:', error)
-
-            const bad = error instanceof BadRequestError
-
-            response.setStatusCode(bad ? 400 : 500)
-            if (bad) {
-                response.write(error.message)
-            }
-
-            response.end()
-
+        if (!AuthHelper.validate(request, response)) {
+            return
         }
+
+        const input = _input(request)
+        const filter = _filter(input)
+        const metadata = await _metadata(input, filter)
+
+        let count = 0
+
+        _find(input, filter)
+            .on('resume', () => {
+                response.setHeader('Content-Type', 'application/json')
+                response.write(`{ "metadata": ${metadata}, "results": [`)
+                response.setStatusCode(200)
+            })
+            .on('data', chunk => {
+
+                if (++count > 1) {
+                    response.write(',')
+                }
+
+                const output = _output(input, chunk)
+                response.write(JSON.stringify(output))
+
+            })
+            .on('end', () => {
+                response.write('] }')
+                response.end()
+            })
+            .on('error', (error) => {
+                console.error('error:', error)
+                response.setStatusCode(500)
+                response.end()
+            })
 
     }
 
@@ -79,11 +58,14 @@ type Path = {
     database?: string
     collection?: string
 }
+
 type SeachIndexMode = 'offset' | 'page'
+
 type SearchIndex = {
     mode: SeachIndexMode,
     value: number
 }
+
 type QueryParameters<T extends Document> = {
     projection: T
     filter: Filter<T>
@@ -91,6 +73,7 @@ type QueryParameters<T extends Document> = {
     limit: number
     index: SearchIndex
 }
+
 type ExporterControllerInput<T extends Document> = {
     path: Path
     parameters: QueryParameters<T>
@@ -98,6 +81,7 @@ type ExporterControllerInput<T extends Document> = {
     window: Window
     now: Date
 }
+
 function _input<T extends Document>(request: Request): ExporterControllerInput<T> {
 
     const { searchParams, pathname } = request.getURL()
@@ -121,6 +105,7 @@ type ExportFilter<T extends Document> = {
     value: Filter<T>,
     options: ListDatabasesOptions | ListCollectionsOptions | CountDocumentsOptions | FindOptions<T>
 }
+
 function _filter<T extends Document>({ parameters, stamps, window, now }: ExporterControllerInput<T>): ExportFilter<T> {
 
     const { projection, filter = {}, sort, limit, index } = parameters
@@ -175,6 +160,7 @@ function _filter<T extends Document>({ parameters, stamps, window, now }: Export
 }
 
 type SkipInput = { limit: number, index: SearchIndex }
+
 function _skip({ limit, index }: SkipInput) {
     const { mode, value } = index
     const _value = value < 0 ? 0 : value
@@ -311,7 +297,7 @@ function _find<T extends Document>({ path }: ExporterControllerInput<T>, filter:
         const mongodb = Regex.inject(MongoDBHelper)
         return StreamHelper.create(mongodb.databases(), {
             transform: (stream, databases) =>
-                databases.forEach(({ name }) => stream.push({ name }))
+                databases.forEach(({ name }) => stream.push({ database: name }))
         })
     }
 
@@ -356,7 +342,7 @@ function _date(input: string, _default: Date) {
         return new ObjectId(input).getTimestamp()
     } catch (error) {
         if (_default) {
-            return _default    
+            return _default
         }
         throw error
     }

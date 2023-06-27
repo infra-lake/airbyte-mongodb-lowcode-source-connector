@@ -1,4 +1,3 @@
-import { ObjectId } from "mongodb"
 
 export class TypeHelper {
 
@@ -22,7 +21,7 @@ export class TypeHelper {
     public static number(input: string) {
 
         const result = Number(input)
-        
+
         if (Number.isNaN(result)) {
             throw new Error(`invalid number: "${input}"`)
         }

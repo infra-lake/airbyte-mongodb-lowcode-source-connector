@@ -1,13 +1,15 @@
 import { MongoClient } from 'mongodb'
+import { BuilderAirbyteController } from './controllers/airbyte/builder.controller'
+import { ConnectionAirbyteController } from './controllers/airbyte/connection.controller'
+import { AirbyteController } from './controllers/airbyte/controller'
 import { ExportController } from './controllers/export.controller'
-import { HealthController } from './controllers/health.controller'
-import { MetricsController } from './controllers/metrics.controller'
-import { NotFoundController } from './controllers/notfound.controller'
+import { HealthController } from './controllers/observability/health.controller'
+import { MetricsController } from './controllers/observability/metrics.controller'
+import { NotFoundController } from './controllers/default/notfound.controller'
 import { EnvironmentHelper } from './helpers/environment.helper'
 import { MetricHelper } from './helpers/metric.helper'
-import { Regex, RegexApplication, Server, Logger } from './regex'
-import { AirbyteBuilderController } from './controllers/airbyte/builder.controller'
 import { MongoDBHelper } from './helpers/mongodb.helper'
+import { Logger, Regex, RegexApplication, Server } from './regex'
 
 EnvironmentHelper.config()
 MetricHelper.config()
@@ -19,7 +21,9 @@ Regex.controller(NotFoundController)
 Regex.controller(HealthController)
 Regex.controller(MetricsController)
 Regex.controller(ExportController)
-Regex.controller(AirbyteBuilderController)
+Regex.controller(AirbyteController)
+Regex.controller(BuilderAirbyteController)
+Regex.controller(ConnectionAirbyteController)
 
 RegexApplication.create({
     startup: (server: Server) => {

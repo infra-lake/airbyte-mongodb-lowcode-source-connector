@@ -1,15 +1,15 @@
 import { Request, Response } from "../regex";
 import { EnvironmentHelper } from "./environment.helper";
 
-const NO_AUTH = 'NO_AUTH'
-
 export class AuthHelper {
+
+    private static readonly NO_AUTH = 'NO_AUTH'
 
     public static validate(request: Request, response: Response) {
 
-        const mode = EnvironmentHelper.get('AUTH_MODE', NO_AUTH).toLowerCase()
+        const mode = EnvironmentHelper.get('AUTH_MODE', AuthHelper.NO_AUTH).toLowerCase()
         const authorization = request.headers['authorization'] ?? ''
-        const [strategy = NO_AUTH, token = ''] = authorization.split(' ').filter(value => value)
+        const [strategy = AuthHelper.NO_AUTH, token = ''] = authorization.split(' ').filter(value => value)
         const method = strategy.toLowerCase()
 
         if (mode === method) {
