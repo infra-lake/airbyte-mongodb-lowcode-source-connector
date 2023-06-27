@@ -35,7 +35,7 @@ export class AirbyteBuilderController implements RegexController {
             const { version, database } = path
 
             if (!ObjectHelper.has(version)) {
-                const versions = Object.keys(_templates).map(version => ({ version }))
+                const versions = Object.keys(_templates).filter(key => key !== 'path').map(version => ({ version }))
                 const output = { metadata: { count: versions.length }, results: versions }
                 response.write(JSON.stringify(output))
                 response.setStatusCode(200)
@@ -106,7 +106,7 @@ type AirbyteControllerInput = {
 function _input(request: Request): AirbyteControllerInput {
 
     const { searchParams, pathname } = request.getURL()
-    const [_, version, database] = pathname.split('/').filter(value => value)
+    const [airbyte, builder, version, database] = pathname.split('/').filter(value => value)
 
     const parameters = QueryStringHelper.parse(searchParams)
 
