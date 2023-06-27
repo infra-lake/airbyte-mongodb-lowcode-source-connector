@@ -72,7 +72,7 @@ export class QueryStringHelper {
                 const input = text.substring('ISODate'.length + 2, text.length - 2)
 
                 try {
-                    const result = TypeHelper.toDate(input)
+                    const result = TypeHelper.date(input)
                     return result as any
                 } catch (error) {
                     throw new BadRequestError(`invalid date: "${text}"`)
@@ -81,7 +81,7 @@ export class QueryStringHelper {
             }
 
 
-            return TypeHelper.toNumber(value)
+            return TypeHelper.number(value)
 
         } catch (error) {
 
@@ -115,7 +115,7 @@ export class QueryStringHelper {
 
         if (typeof value === 'string') {
             try {
-                const result = TypeHelper.toNumber(value)    
+                const result = TypeHelper.number(value)    
             } catch (error) {
                 return `'value'`
             }

@@ -1,20 +1,20 @@
 import fs from 'fs'
 import Handlebars from 'handlebars'
 import { MongoClient } from 'mongodb'
-import { BadRequestError } from '../exceptions/badrequest.error'
-import { AuthHelper } from '../helpers/auth.helper'
-import { MongoDBHelper } from '../helpers/mongodb.helper'
-import { ObjectHelper } from '../helpers/object.helper'
-import { QueryStringHelper } from '../helpers/querystring.helper'
-import { Stamps, StampsHelper } from '../helpers/stamps.helper'
-import { Logger, Regex, RegexController, Request, Response } from '../regex'
+import { BadRequestError } from '../../exceptions/badrequest.error'
+import { AuthHelper } from '../../helpers/auth.helper'
+import { MongoDBHelper } from '../../helpers/mongodb.helper'
+import { ObjectHelper } from '../../helpers/object.helper'
+import { QueryStringHelper } from '../../helpers/querystring.helper'
+import { Stamps, StampsHelper } from '../../helpers/stamps.helper'
+import { Logger, Regex, RegexController, Request, Response } from '../../regex'
 
-export class AirbyteController implements RegexController {
+export class AirbyteBuilderController implements RegexController {
 
-    static path = '^/airbyte'
+    static path = '^/airbyte/builder'
 
     public constructor() {
-        fs.readdirSync('./templates/airbyte').forEach(_compile)
+        fs.readdirSync(_templates.path()).forEach(_compile)
         Handlebars.registerHelper('airbyteConfig', (name) => {
             return `'{{ config[''${name}''] }}'`
         })
@@ -81,12 +81,15 @@ export class AirbyteController implements RegexController {
 
 }
 
-const _templates: { [key: string]: HandlebarsTemplateDelegate | undefined } = {}
+const _templates: { [key: string]: HandlebarsTemplateDelegate | undefined, path: () => string } = {
+    path: () => './templates/airbyte/builder' 
+}
+
 function _compile(version: string) {
     if (version in _templates) {
         return _templates[version]
     }
-    const template = fs.readFileSync(`./templates/airbyte/${version}/template.hbs`).toString('utf-8')
+    const template = fs.readFileSync(`${_templates.path()}/${version}/template.hbs`).toString('utf-8')
     _templates[version] = Handlebars.compile(template, { noEscape: true })
     return _templates[version]
 }

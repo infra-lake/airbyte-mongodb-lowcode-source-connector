@@ -1,7 +1,8 @@
+import { ObjectId } from "mongodb"
 
 export class TypeHelper {
 
-    public static toDate(input: string) {
+    public static date(input: string) {
 
         const model = '0000-01-01T00:00:00.000Z'
 
@@ -18,10 +19,10 @@ export class TypeHelper {
 
     }
 
-    public static toNumber(input: string) {
+    public static number(input: string) {
 
         const result = Number(input)
-
+        
         if (Number.isNaN(result)) {
             throw new Error(`invalid number: "${input}"`)
         }

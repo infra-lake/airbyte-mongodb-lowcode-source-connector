@@ -8,6 +8,7 @@ import { Stamps, StampsHelper } from '../helpers/stamps.helper'
 import { StreamHelper } from '../helpers/stream.helper'
 import { Window, WindowHelper } from '../helpers/window.helper'
 import { Logger, Regex, RegexController, Request, Response } from '../regex'
+import { TypeHelper } from '../helpers/type.helper'
 
 export class ExportController implements RegexController {
 
@@ -95,6 +96,7 @@ type ExporterControllerInput<T extends Document> = {
     parameters: QueryParameters<T>
     stamps: Stamps
     window: Window
+    now: Date
 }
 function _input<T extends Document>(request: Request): ExporterControllerInput<T> {
 
@@ -109,7 +111,9 @@ function _input<T extends Document>(request: Request): ExporterControllerInput<T
     const stamps = StampsHelper.extract(parameters)
     const window = WindowHelper.extract(parameters)
 
-    return { path: { database, collection }, parameters, stamps, window }
+    const now = new Date()
+
+    return { path: { database, collection }, parameters, stamps, window, now }
 
 }
 
@@ -117,7 +121,7 @@ type ExportFilter<T extends Document> = {
     value: Filter<T>,
     options: ListDatabasesOptions | ListCollectionsOptions | CountDocumentsOptions | FindOptions<T>
 }
-function _filter<T extends Document>({ parameters, stamps, window }: ExporterControllerInput<T>): ExportFilter<T> {
+function _filter<T extends Document>({ parameters, stamps, window, now }: ExporterControllerInput<T>): ExportFilter<T> {
 
     const { projection, filter = {}, sort, limit, index } = parameters
     const options = { projection, sort, limit, skip: _skip({ limit, index }) }
@@ -125,13 +129,43 @@ function _filter<T extends Document>({ parameters, stamps, window }: ExporterCon
     if (ObjectHelper.has(window.begin)) {
         (filter as any)['$expr'] = (filter as any)['$expr'] ?? {} as any
         (filter as any)['$expr']['$and'] = (filter as any)['$expr']['$and'] ?? [] as any
-        (filter as any)['$expr']['$and'].push({ $gt: [{ $ifNull: [`$${stamps.update}`, `$${stamps.insert}`, { $convert: { input: `$${stamps.id}`, to: "date" } }] }, window.begin] })
+        (filter as any)['$expr']['$and'].push({
+            $gt: [{
+                $ifNull: [
+                    `$${stamps.update}`,
+                    `$${stamps.insert}`,
+                    {
+                        $convert: {
+                            input: `$${stamps.id}`,
+                            to: "date",
+                            onError: window?.end ?? now,
+                            onNull: window?.end ?? now
+                        }
+                    }
+                ]
+            }, window.begin]
+        })
     }
 
     if (ObjectHelper.has(window.end)) {
         (filter as any)['$expr'] = (filter as any)['$expr'] ?? {} as any
         (filter as any)['$expr']['$and'] = (filter as any)['$expr']['$and'] ?? [] as any
-        (filter as any)['$expr']['$and'].push({ $lte: [{ $ifNull: [`$${stamps.update}`, `$${stamps.insert}`, { $convert: { input: `$${stamps.id}`, to: "date" } }] }, window.end] })
+        (filter as any)['$expr']['$and'].push({
+            $lte: [{
+                $ifNull: [
+                    `$${stamps.update}`,
+                    `$${stamps.insert}`,
+                    {
+                        $convert: {
+                            input: `$${stamps.id}`,
+                            to: "date",
+                            onError: window?.end ?? now,
+                            onNull: window?.end ?? now
+                        }
+                    }
+                ]
+            }, window.end]
+        })
     }
 
     const value = (Object.keys(filter).length > 0 ? filter : undefined) as any
@@ -299,9 +333,61 @@ function _find<T extends Document>({ path }: ExporterControllerInput<T>, filter:
 
 }
 
-function _output<T extends Document>({ stamps }: ExporterControllerInput<T>, chunk: any) {
+function _output<T extends Document>({ path, stamps, window, now }: ExporterControllerInput<T>, chunk: any) {
+
+    if (!ObjectHelper.has(path.database) || !ObjectHelper.has(path.collection)) {
+        return chunk
+    }
+
     const { insert, update, id } = stamps
-    chunk[insert] = chunk[insert] ?? new ObjectId(chunk[id]).getTimestamp()
+
+    chunk[insert] = chunk[insert] ?? _date(chunk[id], window?.begin ?? now)
+
     chunk[update] = chunk[update] ?? chunk[insert]
-    return chunk
+
+    const result = _fix(chunk)
+
+    return result
+
+}
+
+function _date(input: string, _default: Date) {
+    try {
+        return new ObjectId(input).getTimestamp()
+    } catch (error) {
+        if (_default) {
+            return _default    
+        }
+        throw error
+    }
+}
+
+function _fix(object: any): any {
+
+    if (Array.isArray(object)) {
+        object.forEach(_fix)
+        return object
+    }
+
+    if (typeof object === 'object') {
+
+        Object.keys(object).forEach(key => {
+
+            if (key.trim() === '') {
+                const value = object[key]
+                delete object[key]
+                object['__empty__'] = _fix(value)
+                return
+            }
+
+            object[key] = _fix(object[key])
+
+        })
+
+        return object
+
+    }
+
+    return object
+
 }
