@@ -2,11 +2,11 @@
 // import Handlebars from 'handlebars'
 // import { MongoClient } from 'mongodb'
 // import { BadRequestError } from '../../exceptions/badrequest.error'
+// import { AirbyteTemplates } from '../../helpers/airbyte.helper'
 // import { AuthHelper } from '../../helpers/auth.helper'
 // import { MongoDBHelper } from '../../helpers/mongodb.helper'
 // import { ObjectHelper } from '../../helpers/object.helper'
 // import { QueryStringHelper } from '../../helpers/querystring.helper'
-// import { Stamps, StampsHelper } from '../../helpers/stamps.helper'
 // import { Logger, Regex, RegexController, Request, Response } from '../../regex'
 
 // export class AirbyteConnectionController implements RegexController {
@@ -75,8 +75,8 @@
 
 // }
 
-// const _templates: { [key: string]: HandlebarsTemplateDelegate | undefined, path: () => string } = {
-//     path: () => './templates/airbyte/connection' 
+// const _templates: AirbyteTemplates = {
+//     path: () => './templates/airbyte/connection'
 // }
 
 // function _compile(version: string) {

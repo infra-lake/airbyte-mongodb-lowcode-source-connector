@@ -8,6 +8,7 @@ import { ObjectHelper } from '../../helpers/object.helper'
 import { QueryStringHelper } from '../../helpers/querystring.helper'
 import { Stamps, StampsHelper } from '../../helpers/stamps.helper'
 import { Logger, Regex, RegexController, Request, Response } from '../../regex'
+import { AirbyteTemplates } from '../../helpers/airbyte.helper'
 
 export class AirbyteBuilderController implements RegexController {
 
@@ -81,8 +82,8 @@ export class AirbyteBuilderController implements RegexController {
 
 }
 
-const _templates: { [key: string]: HandlebarsTemplateDelegate | undefined, path: () => string } = {
-    path: () => './templates/airbyte/builder' 
+const _templates: AirbyteTemplates = {
+    path: () => './templates/airbyte/builder'
 }
 
 function _compile(version: string) {

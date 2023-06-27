@@ -364,6 +364,10 @@ function _date(input: string, _default: Date) {
 
 function _fix(object: any): any {
 
+    if (!ObjectHelper.has(object)) {
+        return object
+    }
+
     if (Array.isArray(object)) {
         object.forEach(_fix)
         return object
