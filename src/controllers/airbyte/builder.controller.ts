@@ -5,6 +5,7 @@ import { ObjectHelper } from '../../helpers/object.helper'
 import { QueryStringHelper } from '../../helpers/querystring.helper'
 import { Stamps, StampsHelper } from '../../helpers/stamps.helper'
 import { RegexController, Request, Response } from '../../regex'
+import { ApplicationHelper } from '../../helpers/application.helper'
 
 export class BuilderAirbyteController implements RegexController {
 
@@ -44,9 +45,10 @@ export class BuilderAirbyteController implements RegexController {
             response.end()
             return
         }
-
+        
+        const { url_base = ApplicationHelper.URL.BASE, documentation_url = ApplicationHelper.URL.DOCUMENTATION } = parameters
         const streams = await AirbyteHelper.streams(database, parameters)
-        const output = BuilderAirbyteController.templates[version]?.({ streams, stamps })
+        const output = BuilderAirbyteController.templates[version]?.({ streams, stamps, url_base, documentation_url })
 
         response.write(output)
         response.setStatusCode(200)

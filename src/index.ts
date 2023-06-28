@@ -10,6 +10,7 @@ import { EnvironmentHelper } from './helpers/environment.helper'
 import { MetricHelper } from './helpers/metric.helper'
 import { MongoDBHelper } from './helpers/mongodb.helper'
 import { Logger, Regex, RegexApplication, Server } from './regex'
+import { ApplicationHelper } from './helpers/application.helper'
 
 EnvironmentHelper.config()
 MetricHelper.config()
@@ -27,7 +28,7 @@ Regex.controller(ConnectionAirbyteController)
 
 RegexApplication.create({
     startup: (server: Server) => {
-        const port = parseInt(EnvironmentHelper.get('PORT', '4000'))
+        const port = ApplicationHelper.PORT
         server.listen(port, () => {
             const logger = Regex.register(Logger)
             logger.log('airbyte-mongodb-lowcode-source was successfully started on port', port)

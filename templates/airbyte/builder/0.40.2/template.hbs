@@ -29,7 +29,7 @@ streams:
       type: SimpleRetriever
       requester:
         type: HttpRequester
-        url_base: http://mongodb-exporter-service:4000
+        url_base: {{ ../url_base }}
         path: /export/{{ this.database }}/{{ this.name }}
         http_method: GET
         request_parameters:
@@ -71,7 +71,7 @@ streams:
     incremental_sync:
       type: DatetimeBasedCursor
       cursor_field: {{ ../stamps.update }}
-      datetime_format: '%Y-%m-%dT%H:%M:%S.000Z'
+      datetime_format: '%Y-%m-%dT%H:%M:%SZ'
       end_time_option:
         type: RequestOption
         field_name: __window[end]
@@ -116,6 +116,6 @@ spec:
         airbyte_secret: true
         order: 2
     additionalProperties: true
-  documentation_url: https://example.org
+  documentation_url: {{ documentation_url }}
   type: Spec
   
