@@ -6,6 +6,8 @@ import { NotFoundController } from '../controllers/default/notfound.controller.j
 import { ResilienceHelper } from '../helpers/resilience.helper.js'
 import { ObjectHelper } from '../helpers/object.helper.js'
 import { ControllerHelper } from '../helpers/controller.helper.js'
+import { ApplicationHelper } from '../helpers/application.helper.js'
+import { AuthHelper } from '../helpers/auth.helper.js'
 
 
 export interface Request extends IncomingMessage { 
@@ -48,6 +50,20 @@ async function listener(incomeMessage: IncomingMessage, serverResponse: ServerRe
         request.logger.log('call', request.getURL().pathname)
         MetricHelper.http_received_request_total.inc()
         MetricHelper.http_received_request_total.inc({ path: request.getURL().pathname })
+
+        if (request.getURL().pathname === '/') {
+
+            if (!AuthHelper.validate(request, response)) {
+                return
+            }
+
+            const paths = ApplicationHelper.paths()
+            response.setStatusCode(200)
+            response.write(JSON.stringify(paths))
+            response.end()
+            return
+            
+        }
 
         const controller = Regex.inject<RegexController>(request.getURL().pathname)
 

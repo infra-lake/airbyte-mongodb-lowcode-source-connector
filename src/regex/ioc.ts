@@ -6,7 +6,8 @@ export enum RegexField {
     ID = '__regex_ioc_id',
     REGEX = '__regex_ioc_regex',
     TYPE = '__regex_ioc_type',
-    MULTIPLE = '__regex_ioc_multiple'
+    MULTIPLE = '__regex_ioc_multiple',
+    CONTROLLER = '__regex_ioc_controller'
 }
 
 export type RegexClass<T> = new (...args: any[]) => T
@@ -15,8 +16,17 @@ export type RegexpKey<T> = string | RegexClass<T>
 export type RegexControler<T extends RegexController> = RegexClass<T> & { path: string }
 
 export class Regex {
-
+    
     private static readonly instances: { [key: string]: any } = {}
+
+    public static controllers() {
+        const result = 
+            Object
+                .keys(this.instances)
+                .filter(key => this.instances[key][RegexField.CONTROLLER])
+                .map(key => this.instances[key])
+        return result
+    }
 
     public static inject<T>(key: RegexpKey<T>): T {
 
@@ -59,12 +69,14 @@ export class Regex {
         type[RegexField.MULTIPLE] = false
         type[RegexField.TYPE] = type.name
         type[RegexField.MULTIPLE] = type[RegexField.MULTIPLE]
+        type[RegexField.CONTROLLER] = true
 
         const instance: any = new type(...args)
         instance[RegexField.ID] = type[RegexField.ID]
         instance[RegexField.REGEX] = type[RegexField.REGEX]
         instance[RegexField.TYPE] = type[RegexField.TYPE]
         instance[RegexField.MULTIPLE] = type[RegexField.MULTIPLE]
+        instance[RegexField.CONTROLLER] = type[RegexField.CONTROLLER]
 
         if (!Regex.exists(type[RegexField.REGEX] as string)) {
             Regex.instances[type[RegexField.REGEX] as string] = instance
@@ -100,12 +112,14 @@ export class Regex {
 
         type[RegexField.TYPE] = type.name
         type[RegexField.MULTIPLE] = type[RegexField.MULTIPLE] ?? false
+        type[RegexField.CONTROLLER] = false
 
         const instance: any = new type(...args)
         instance[RegexField.ID] = type[RegexField.ID]
         instance[RegexField.REGEX] = type[RegexField.REGEX]
         instance[RegexField.TYPE] = type[RegexField.TYPE]
         instance[RegexField.MULTIPLE] = type[RegexField.MULTIPLE]
+        instance[RegexField.CONTROLLER] = type[RegexField.CONTROLLER]
 
         if (!Regex.exists(type[RegexField.REGEX] as string)) {
             Regex.instances[type[RegexField.REGEX] as string] = instance
