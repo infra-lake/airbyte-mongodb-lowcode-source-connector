@@ -1,6 +1,7 @@
 import qs from 'qs'
 import { BadRequestError } from '../exceptions/badrequest.error'
-import { TypeHelper } from './type.helper'
+import { DateHelper } from './date.helper'
+import { NumberHelper } from './number.helper'
 
 export class QueryStringHelper {
 
@@ -72,7 +73,7 @@ export class QueryStringHelper {
                 const input = text.substring('ISODate'.length + 2, text.length - 2)
 
                 try {
-                    const result = TypeHelper.date(input)
+                    const result = DateHelper.parse(input)
                     return result as any
                 } catch (error) {
                     throw new BadRequestError(`invalid date: "${text}"`)
@@ -81,7 +82,7 @@ export class QueryStringHelper {
             }
 
 
-            return TypeHelper.number(value)
+            return NumberHelper.parse(value)
 
         } catch (error) {
 
@@ -115,7 +116,7 @@ export class QueryStringHelper {
 
         if (typeof value === 'string') {
             try {
-                const result = TypeHelper.number(value)    
+                const result = NumberHelper.parse(value)
             } catch (error) {
                 return `'value'`
             }

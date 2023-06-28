@@ -17,7 +17,7 @@ export class BuilderAirbyteController implements RegexController {
             return `'{{ config[''${name}''] }}'`
         })
         Handlebars.registerHelper('airbyteNow', () => {
-            return `'{{ now_utc().strftime(''%Y-%m-%dT%H:%M:%SZ'') }}'`
+            return `'{{ now_utc().strftime(''%Y-%m-%dT%H:%M:%S.%fZ'') }}'`
         })
     }
 

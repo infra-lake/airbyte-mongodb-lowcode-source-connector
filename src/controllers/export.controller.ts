@@ -7,6 +7,7 @@ import { Stamps, StampsHelper } from '../helpers/stamps.helper'
 import { StreamHelper } from '../helpers/stream.helper'
 import { Window, WindowHelper } from '../helpers/window.helper'
 import { Regex, RegexController, Request, Response } from '../regex'
+import { DateHelper } from '../helpers/date.helper'
 
 export class ExportController implements RegexController {
 
@@ -328,8 +329,10 @@ function _output<T extends Document>({ path, stamps, window, now }: ExporterCont
     const { insert, update, id } = stamps
 
     chunk[insert] = chunk[insert] ?? _date(chunk[id], window?.begin ?? now)
-
     chunk[update] = chunk[update] ?? chunk[insert]
+
+    chunk[insert] = DateHelper.stringify(chunk[insert])
+    chunk[update] = DateHelper.stringify(chunk[update])
 
     const result = _fix(chunk)
 
