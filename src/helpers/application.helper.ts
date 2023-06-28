@@ -28,7 +28,11 @@ export class ApplicationHelper {
 
     public static paths() {
         const controllers = Regex.controllers()
-        return { metadata: { count: controllers.length }, results: controllers.map(({ constructor }) => ({ path: constructor.path })) }
+        const results = 
+            controllers
+                .map(({ constructor }) => constructor)
+                .map(({ path }) => ({ path }))
+        return { metadata: { count: controllers.length }, results }
     }
 
 }
