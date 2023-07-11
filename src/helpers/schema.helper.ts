@@ -12,24 +12,21 @@ export class SchemaHelper {
     public static async infer({ database, name }: AirbyteStream, { stamps, now }: Omit<OutputInput, 'database' | 'collection' | 'window'>) {
 
         const mongodb = Regex.inject(MongoClient)
-        
+
         return new Promise<string>((resolve, reject) => {
 
-            const samples: string[] = []
+            const json = jsonInputForTargetLanguage(language)
+            const data = new InputData()
             
             mongodb.db(database).collection(name).find().stream()
                 .on('data', async chunk => {
                     const sample = JSON.stringify(ExporterHelper.output(chunk, { database, collection: name, stamps, now }))
-                    samples.push(sample)
+                    await json.addSource({ name, samples: [sample] })
+
+                    data.addInput(json)
                 })
                 .on('end', async () => {
 
-                    const json = jsonInputForTargetLanguage(language, undefined, false)
-                    await json.addSource({ name, samples })
-                    
-                    const data = new InputData()
-                    data.addInput(json)
-                    
                     const schema = await quicktype({
                         inputData: data,
                         lang: language,
@@ -43,9 +40,9 @@ export class SchemaHelper {
                     })
 
                     const result = SchemaHelper.serialize(schema)
-                    
+
                     resolve(result)
-                
+
                 })
                 .on('error', (error) => {
                     reject(error)
