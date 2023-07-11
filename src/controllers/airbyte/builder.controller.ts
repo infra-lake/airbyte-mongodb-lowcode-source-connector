@@ -1,11 +1,12 @@
 import Handlebars from 'handlebars'
 import { AirbyteHelper } from '../../helpers/airbyte.helper'
+import { ApplicationHelper } from '../../helpers/application.helper'
 import { AuthHelper } from '../../helpers/auth.helper'
 import { ObjectHelper } from '../../helpers/object.helper'
 import { QueryStringHelper } from '../../helpers/querystring.helper'
+import { SchemaHelper } from '../../helpers/schema.helper'
 import { Stamps, StampsHelper } from '../../helpers/stamps.helper'
 import { RegexController, Request, Response } from '../../regex'
-import { ApplicationHelper } from '../../helpers/application.helper'
 
 export class BuilderAirbyteController implements RegexController {
 
@@ -27,9 +28,8 @@ export class BuilderAirbyteController implements RegexController {
             return
         }
 
-        const { path, parameters, stamps } = _input(request)
-        const { version, database } = path
-
+        const { version, database, parameters, stamps } = _input(request)
+        
         if (!ObjectHelper.has(version)) {
             const output = AirbyteHelper.versions(BuilderAirbyteController.templates)
             response.write(JSON.stringify(output))
@@ -48,6 +48,12 @@ export class BuilderAirbyteController implements RegexController {
         
         const { url_base = ApplicationHelper.URL.BASE, documentation_url = ApplicationHelper.URL.DOCUMENTATION } = parameters
         const streams = await AirbyteHelper.streams(database, parameters)
+    
+
+        await Promise.all(streams.map(async stream => {
+            stream.schema = await SchemaHelper.infer(stream, { stamps })
+        }))
+
         const output = BuilderAirbyteController.templates[version]?.({ streams, stamps, url_base, documentation_url })
 
         response.write(output)
@@ -57,14 +63,9 @@ export class BuilderAirbyteController implements RegexController {
     }
 
 }
-
-type Path = {
+type AirbyteControllerInput = {
     version: string
     database: string
-}
-
-type AirbyteControllerInput = {
-    path: Path
     parameters: any
     stamps: Stamps
 }
@@ -78,7 +79,7 @@ function _input(request: Request): AirbyteControllerInput {
 
     const stamps = StampsHelper.extract(parameters)
 
-    return { path: { version, database }, parameters, stamps }
+    return { version, database, parameters, stamps }
 
 }
 

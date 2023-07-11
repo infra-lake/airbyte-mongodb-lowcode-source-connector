@@ -1,5 +1,6 @@
-import { CountDocumentsOptions, Document, Filter, FindOptions, ListCollectionsOptions, ListDatabasesOptions, ObjectId, Sort } from 'mongodb'
+import { CountDocumentsOptions, Document, Filter, FindOptions, ListCollectionsOptions, ListDatabasesOptions, Sort } from 'mongodb'
 import { AuthHelper } from '../helpers/auth.helper'
+import { ExporterHelper, OutputInput } from '../helpers/exporter.helper'
 import { MongoDBHelper } from '../helpers/mongodb.helper'
 import { ObjectHelper } from '../helpers/object.helper'
 import { QueryStringHelper } from '../helpers/querystring.helper'
@@ -7,7 +8,6 @@ import { Stamps, StampsHelper } from '../helpers/stamps.helper'
 import { StreamHelper } from '../helpers/stream.helper'
 import { Window, WindowHelper } from '../helpers/window.helper'
 import { Regex, RegexController, Request, Response } from '../regex'
-import { DateHelper } from '../helpers/date.helper'
 
 export class ExportController implements RegexController {
 
@@ -37,7 +37,7 @@ export class ExportController implements RegexController {
                     response.write(',')
                 }
 
-                const output = _output(input, chunk)
+                const output = ExporterHelper.output(chunk, input as Required<OutputInput>)
                 response.write(JSON.stringify(output))
 
             })
@@ -55,35 +55,31 @@ export class ExportController implements RegexController {
 
 }
 
-type Path = {
-    database?: string
-    collection?: string
-}
+type ExportControllerSeachIndexMode = 'offset' | 'page'
 
-type SeachIndexMode = 'offset' | 'page'
-
-type SearchIndex = {
-    mode: SeachIndexMode,
+type ExportControllerSearchIndex = {
+    mode: ExportControllerSeachIndexMode,
     value: number
 }
 
-type QueryParameters<T extends Document> = {
+type ExportControllerQueryParameters<T extends Document> = {
     projection: T
     filter: Filter<T>
     sort: Sort
     limit: number
-    index: SearchIndex
+    index: ExportControllerSearchIndex
 }
 
-type ExporterControllerInput<T extends Document> = {
-    path: Path
-    parameters: QueryParameters<T>
+type ExportControllerInput<T extends Document> = {
+    database?: string
+    collection?: string
     stamps: Stamps
     window: Window
     now: Date
+    parameters: ExportControllerQueryParameters<T>
 }
 
-function _input<T extends Document>(request: Request): ExporterControllerInput<T> {
+function _input<T extends Document>(request: Request): ExportControllerInput<T> {
 
     const { searchParams, pathname } = request.getURL()
     const [_, database, collection, hash] = pathname.split('/').filter(value => value)
@@ -98,16 +94,17 @@ function _input<T extends Document>(request: Request): ExporterControllerInput<T
 
     const now = new Date()
 
-    return { path: { database, collection }, parameters, stamps, window, now }
+    return { database, collection, parameters, stamps, window, now }
 
 }
 
-type ExportFilter<T extends Document> = {
+
+type ExportControllerFilter<T extends Document> = {
     value: Filter<T>,
     options: ListDatabasesOptions | ListCollectionsOptions | CountDocumentsOptions | FindOptions<T>
 }
 
-function _filter<T extends Document>({ parameters, stamps, window, now }: ExporterControllerInput<T>): ExportFilter<T> {
+function _filter<T extends Document>({ parameters, stamps, window, now }: ExportControllerInput<T>): ExportControllerFilter<T> {
 
     const { projection, filter = {}, sort, limit, index } = parameters
     const options = { projection, sort, limit, skip: _skip({ limit, index }) }
@@ -160,16 +157,16 @@ function _filter<T extends Document>({ parameters, stamps, window, now }: Export
 
 }
 
-type SkipInput = { limit: number, index: SearchIndex }
+type ExportControllerSkipInput = { limit: number, index: ExportControllerSearchIndex }
 
-function _skip({ limit, index }: SkipInput) {
+function _skip({ limit, index }: ExportControllerSkipInput) {
     const { mode, value } = index
     const _value = value < 0 ? 0 : value
     const result = mode === 'offset' ? _value : limit * _value
     return result
 }
 
-async function _metadata<T extends Document>(input: ExporterControllerInput<T>, filter: ExportFilter<T>) {
+async function _metadata<T extends Document>(input: ExportControllerInput<T>, filter: ExportControllerFilter<T>) {
 
     const count = await _count(input, filter)
 
@@ -180,7 +177,7 @@ async function _metadata<T extends Document>(input: ExporterControllerInput<T>, 
 
     const result: any = { index, count }
 
-    if (ObjectHelper.has(input.path.database) && ObjectHelper.has(input.path.collection)) {
+    if (ObjectHelper.has(input.database) && ObjectHelper.has(input.collection)) {
         result.previous = await _previous(input, filter, count)
         result.next = await _next(input, filter, count)
     }
@@ -189,7 +186,7 @@ async function _metadata<T extends Document>(input: ExporterControllerInput<T>, 
 
 }
 
-function _previous<T extends Document>(input: ExporterControllerInput<T>, filter: ExportFilter<T>, count: number) {
+function _previous<T extends Document>(input: ExportControllerInput<T>, filter: ExportControllerFilter<T>, count: number) {
 
     const { parameters } = input
     const { projection, filter: _filter, sort, limit, index } = parameters
@@ -230,7 +227,7 @@ function _previous<T extends Document>(input: ExporterControllerInput<T>, filter
 
 }
 
-async function _next<T extends Document>(input: ExporterControllerInput<T>, filter: ExportFilter<T>, count: number) {
+async function _next<T extends Document>(input: ExportControllerInput<T>, filter: ExportControllerFilter<T>, count: number) {
 
     const { parameters } = input
     const { projection, filter: _filter, sort, limit, index } = parameters
@@ -249,7 +246,7 @@ async function _next<T extends Document>(input: ExporterControllerInput<T>, filt
 
 }
 
-function _token<T extends Document>(parameters: QueryParameters<T>): string {
+function _token<T extends Document>(parameters: ExportControllerQueryParameters<T>): string {
 
     (parameters as any).mode = parameters.index.mode
     if (parameters.index.mode === 'offset') {
@@ -263,9 +260,7 @@ function _token<T extends Document>(parameters: QueryParameters<T>): string {
 
 }
 
-async function _count<T extends Document>({ path }: ExporterControllerInput<T>, filter: ExportFilter<T>): Promise<number> {
-
-    const { database, collection } = path
+async function _count<T extends Document>({ database, collection }: ExportControllerInput<T>, filter: ExportControllerFilter<T>): Promise<number> {
 
     if (!ObjectHelper.has(database) && !ObjectHelper.has(collection)) {
         const mongodb = Regex.inject(MongoDBHelper)
@@ -290,9 +285,7 @@ async function _count<T extends Document>({ path }: ExporterControllerInput<T>, 
 
 }
 
-function _find<T extends Document>({ path }: ExporterControllerInput<T>, filter: ExportFilter<T>) {
-
-    const { database, collection } = path
+function _find<T extends Document>({ database, collection }: ExportControllerInput<T>, filter: ExportControllerFilter<T>) {
 
     if (!ObjectHelper.has(database) && !ObjectHelper.has(collection)) {
         const mongodb = Regex.inject(MongoDBHelper)
@@ -317,70 +310,5 @@ function _find<T extends Document>({ path }: ExporterControllerInput<T>, filter:
     }
 
     throw new Error(`database of collection ${collection} must be informed!`)
-
-}
-
-function _output<T extends Document>({ path, stamps, window, now }: ExporterControllerInput<T>, chunk: any) {
-
-    if (!ObjectHelper.has(path.database) || !ObjectHelper.has(path.collection)) {
-        return chunk
-    }
-
-    const { insert, update, id } = stamps
-
-    chunk[insert] = chunk[insert] ?? _date(chunk[id], window?.begin ?? now)
-    chunk[update] = chunk[update] ?? chunk[insert]
-
-    chunk[insert] = DateHelper.stringify(chunk[insert])
-    chunk[update] = DateHelper.stringify(chunk[update])
-
-    const result = _fix(chunk)
-
-    return result
-
-}
-
-function _date(input: string, _default: Date) {
-    try {
-        return new ObjectId(input).getTimestamp()
-    } catch (error) {
-        if (_default) {
-            return _default
-        }
-        throw error
-    }
-}
-
-function _fix(object: any): any {
-
-    if (!ObjectHelper.has(object)) {
-        return object
-    }
-
-    if (Array.isArray(object)) {
-        object.forEach(_fix)
-        return object
-    }
-
-    if (typeof object === 'object') {
-
-        Object.keys(object).forEach(key => {
-
-            if (key.trim() === '') {
-                const value = object[key]
-                delete object[key]
-                object['__empty__'] = _fix(value)
-                return
-            }
-
-            object[key] = _fix(object[key])
-
-        })
-
-        return object
-
-    }
-
-    return object
 
 }

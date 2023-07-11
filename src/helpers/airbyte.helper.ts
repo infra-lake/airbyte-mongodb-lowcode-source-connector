@@ -6,7 +6,7 @@ import { MongoDBHelper } from './mongodb.helper'
 
 export type AirbyteTemplatesType = 'builder' | 'connection'
 export type AirbyteTemplates = { [key: string]: HandlebarsTemplateDelegate | undefined }
-export type AirbyteStream = { database: string, name: string }
+export type AirbyteStream = { database: string, name: string, schema?: string }
 export type AirbyteStreamsOptions = {
     remove?: string[]
 }

@@ -14,17 +14,7 @@ streams:
       - {{ ../stamps.id }}
     schema_loader:
       type: InlineSchemaLoader
-      schema:
-        "$schema": https://json-schema.org/draft/2019-09/schema
-        additionalProperties: true
-        properties:
-          {{ ../stamps.id }}:
-            type: string
-          {{ ../stamps.insert }}:
-            type: string
-          {{ ../stamps.update }}:
-            type: string
-        type: object
+      schema: {{ this.schema }}
     retriever:
       type: SimpleRetriever
       requester:
