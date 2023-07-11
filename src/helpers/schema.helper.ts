@@ -22,7 +22,6 @@ export class SchemaHelper {
                 .on('data', async chunk => {
                     const sample = JSON.stringify(ExporterHelper.output(chunk, { database, collection: name, stamps, now }))
                     await json.addSource({ name, samples: [sample] })
-
                     data.addInput(json)
                 })
                 .on('end', async () => {
