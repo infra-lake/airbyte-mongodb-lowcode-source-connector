@@ -1,6 +1,5 @@
-import { CountDocumentsOptions, Document, Filter, FindOptions, ListCollectionsOptions, ListDatabasesOptions, Sort } from 'mongodb'
+import { CountDocumentsOptions, Document, Filter, FindOptions, ListCollectionsOptions, ListDatabasesOptions, ObjectId, Sort } from 'mongodb'
 import { AuthHelper } from '../helpers/auth.helper'
-import { ExporterHelper, OutputInput } from '../helpers/exporter.helper'
 import { MongoDBHelper } from '../helpers/mongodb.helper'
 import { ObjectHelper } from '../helpers/object.helper'
 import { QueryStringHelper } from '../helpers/querystring.helper'
@@ -8,6 +7,7 @@ import { Stamps, StampsHelper } from '../helpers/stamps.helper'
 import { StreamHelper } from '../helpers/stream.helper'
 import { Window, WindowHelper } from '../helpers/window.helper'
 import { Regex, RegexController, Request, Response } from '../regex'
+import { DateHelper } from '../helpers/date.helper'
 
 export class ExportController implements RegexController {
 
@@ -37,7 +37,7 @@ export class ExportController implements RegexController {
                     response.write(',')
                 }
 
-                const output = ExporterHelper.output(chunk, input as Required<OutputInput>)
+                const output = _output(chunk, input as Required<ExportControllerOutputInput>)
                 response.write(JSON.stringify(output))
 
             })
@@ -116,7 +116,9 @@ function _filter<T extends Document>({ parameters, stamps, window, now }: Export
             $gt: [{
                 $ifNull: [
                     `$${stamps.update}`,
+                    `$updatedAt`,
                     `$${stamps.insert}`,
+                    `$createdAt`,
                     {
                         $convert: {
                             input: `$${stamps.id}`,
@@ -137,7 +139,9 @@ function _filter<T extends Document>({ parameters, stamps, window, now }: Export
             $lte: [{
                 $ifNull: [
                     `$${stamps.update}`,
+                    `$updatedAt`,
                     `$${stamps.insert}`,
+                    `$createdAt`,
                     {
                         $convert: {
                             input: `$${stamps.id}`,
@@ -310,5 +314,87 @@ function _find<T extends Document>({ database, collection }: ExportControllerInp
     }
 
     throw new Error(`database of collection ${collection} must be informed!`)
+
+}
+
+type ExportControllerOutputInput = {
+    database: string,
+    collection: string,
+    stamps: Stamps,
+    window?: Window,
+    now?: Date
+}
+
+function _output(chunk: any, { database, collection, stamps, window, now }: ExportControllerOutputInput) {
+
+    const _now = now ?? new Date()
+
+    if (!ObjectHelper.has(database) || !ObjectHelper.has(collection)) {
+        return chunk
+    }
+
+    const { insert, update, id } = stamps
+
+    chunk[insert] = chunk?.[insert] ?? chunk?.createdAt ?? _date(chunk?.[id], window?.begin ?? _now)
+    chunk[update] = chunk?.[update] ?? chunk?.updatedAt ?? chunk[insert]
+
+    chunk[insert] = DateHelper.stringify(chunk[insert])
+    chunk[update] = DateHelper.stringify(chunk[update])
+    
+    const data = JSON.stringify(_fix(chunk)) 
+
+    const result = { 
+        [id]: chunk[id], 
+        [insert]: chunk[insert], 
+        [update]: chunk[update], 
+        data
+    }
+
+    return result
+
+}
+
+function _date(input: string, _default: Date) {
+    try {
+        return new ObjectId(input).getTimestamp()
+    } catch (error) {
+        if (_default) {
+            return _default
+        }
+        throw error
+    }
+}
+
+function _fix(object: any): any {
+
+    if (!ObjectHelper.has(object)) {
+        return object
+    }
+
+    if (Array.isArray(object)) {
+        object.forEach(_fix)
+        return object
+    }
+
+    if (typeof object === 'object') {
+
+        Object.keys(object).forEach(key => {
+
+            if (key.trim() === '') {
+                const value = object[key]
+                delete object[key]
+                object['__empty__'] = _fix(value)
+                return
+            }
+
+            object[key] = _fix(object[key])
+
+        })
+
+        return object
+
+    }
+
+    return object
 
 }

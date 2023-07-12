@@ -4,7 +4,6 @@ import { ApplicationHelper } from '../../helpers/application.helper'
 import { AuthHelper } from '../../helpers/auth.helper'
 import { ObjectHelper } from '../../helpers/object.helper'
 import { QueryStringHelper } from '../../helpers/querystring.helper'
-import { SchemaHelper } from '../../helpers/schema.helper'
 import { Stamps, StampsHelper } from '../../helpers/stamps.helper'
 import { RegexController, Request, Response } from '../../regex'
 
@@ -48,12 +47,6 @@ export class BuilderAirbyteController implements RegexController {
         
         const { url_base = ApplicationHelper.URL.BASE, documentation_url = ApplicationHelper.URL.DOCUMENTATION } = parameters
         const streams = await AirbyteHelper.streams(database, parameters)
-    
-
-        await Promise.all(streams.map(async stream => {
-            stream.schema = await SchemaHelper.infer(stream, { stamps })
-        }))
-
         const output = BuilderAirbyteController.templates[version]?.({ streams, stamps, url_base, documentation_url })
 
         response.write(output)

@@ -1,6 +1,6 @@
 {
   "name": "airbyte-mongodb-lowcode-source",
-  "version": "1.2.12",
+  "version": "1.2.13",
   "description": "Another option to connect Mongodb on Airbyte as a Source",
   "main": "src/index.mjs",
   "scripts": {
@@ -25,11 +25,9 @@
     "@types/js-yaml": "^4.0.5",
     "dotenv": "^16.1.4",
     "handlebars": "^4.7.7",
-    "js-yaml": "^4.1.0",
     "mongodb": "^5.6.0",
     "prom-client": "^14.2.0",
-    "qs": "^6.11.2",
-    "quicktype-core": "^23.0.54"
+    "qs": "^6.11.2"
   },
   "devDependencies": {
     "@types/qs": "^6.9.7",

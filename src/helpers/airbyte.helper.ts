@@ -3,6 +3,7 @@ import Handlebars from 'handlebars'
 import { MongoClient } from 'mongodb'
 import { Regex, Request } from '../regex'
 import { MongoDBHelper } from './mongodb.helper'
+import { ApplicationHelper } from './application.helper'
 
 export type AirbyteTemplatesType = 'builder' | 'connection'
 export type AirbyteTemplates = { [key: string]: HandlebarsTemplateDelegate | undefined }
@@ -49,13 +50,13 @@ export class AirbyteHelper {
         return { metadata: { count: databases.length }, results: databases.map(({ name }) => ({ database: name })) }
     }
 
-    public static async streams(database: string, { remove = [] }: AirbyteStreamsOptions | undefined = {}): Promise<Array<AirbyteStream>> {
+    public static async streams(database: string, { remove = ApplicationHelper.REMOVE.STREAMS }: AirbyteStreamsOptions | undefined = {}): Promise<Array<AirbyteStream>> {
         const mongodb = Regex.inject(MongoClient)
         const collections = await mongodb.db(database).collections()
         const result =
             collections
                 .map(({ dbName: database, collectionName: name }) => ({ database, name }))
-                .filter(({ name }) => (remove ?? []).length > 0 ? remove.includes(name) : true)
+                .filter(({ name }) => !(remove ?? []).includes(name))
                 .sort((a, b) => a.name.localeCompare(b.name))
         return result
     }
