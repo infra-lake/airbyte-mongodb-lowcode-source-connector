@@ -81,7 +81,7 @@ streams:
         type: RequestOption
         field_name: __window[begin]
         inject_into: request_parameter
-      cursor_granularity: PT1S
+      cursor_granularity: PT0.000001S
       start_datetime:
         type: MinMaxDatetime
         datetime: {{ airbyteConfig "start_date" }}
