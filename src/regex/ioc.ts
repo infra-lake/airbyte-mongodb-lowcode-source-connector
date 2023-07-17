@@ -11,7 +11,7 @@ export enum RegexField {
 }
 
 export type RegexClass<T> = new (...args: any[]) => T
-export type RegexpKey<T> = string | RegexClass<T>
+export type RegexKey<T> = string | RegexClass<T>
 
 export type RegexControler<T extends RegexController> = RegexClass<T> & { path: string }
 
@@ -28,7 +28,7 @@ export class Regex {
         return result
     }
 
-    public static inject<T>(key: RegexpKey<T>): T {
+    public static inject<T>(key: RegexKey<T>): T {
 
         const text: string =
             typeof key === 'string'
@@ -39,7 +39,7 @@ export class Regex {
             Object
                 .keys(Regex.instances)
                 .filter(regex => text.match(regex) ?? text === regex)
-                .map(key => Regex.instances[key])
+                .flatMap(key => Regex.instances[key])
 
         const result =
             instances.length > 1
@@ -66,7 +66,7 @@ export class Regex {
 
         type[RegexField.ID] = `${type.name}-${randomUUID()}-${new Date().getTime()}`
         type[RegexField.REGEX] = type.path
-        type[RegexField.MULTIPLE] = false
+        type[RegexField.MULTIPLE] = true
         type[RegexField.TYPE] = type.name
         type[RegexField.MULTIPLE] = type[RegexField.MULTIPLE]
         type[RegexField.CONTROLLER] = true
@@ -80,12 +80,13 @@ export class Regex {
 
         if (!Regex.exists(type[RegexField.REGEX] as string)) {
             Regex.instances[type[RegexField.REGEX] as string] = instance
-        } else {
-            throw Error(`there are two controllers competing to the same path ${type[RegexField.REGEX]}`)
+        } else if (Array.isArray(Regex.instances[type[RegexField.REGEX] as string])) {
+            Regex.instances[type[RegexField.REGEX] as string].push(instance)
+        } else if (Regex.instances[type[RegexField.REGEX] as string][RegexField.MULTIPLE]) {
+            Regex.instances[type[RegexField.REGEX] as string] = [Regex.instances[type[RegexField.REGEX] as string], instance]
         }
 
         return Regex.instances[type[RegexField.REGEX] as string]
-
 
     }
 
@@ -154,7 +155,7 @@ export class Regex {
         return 'regex' in object && object.regex === '{random}'
     }
 
-    public static unregister<T>(key: RegexpKey<T> | any) {
+    public static unregister<T>(key: RegexKey<T> | any) {
 
         const text: string =
             typeof key === 'string'

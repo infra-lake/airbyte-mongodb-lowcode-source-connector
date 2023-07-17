@@ -1,12 +1,11 @@
-import { AuthHelper } from '../helpers/auth.helper'
-import { QueryStringHelper } from '../helpers/querystring.helper'
-import { Regex, RegexController, Request, Response, TransactionalContext } from '../regex'
-import { Export4Save, ExportService } from '../services/export.service'
+import { AuthHelper } from '../../helpers/auth.helper'
+import { QueryStringHelper } from '../../helpers/querystring.helper'
+import { Regex, RegexController, Request, Response } from '../../regex'
+import { Target, TargetService } from '../../services/target.service'
 
+export class TargetSettingsController implements RegexController {
 
-export class ExportController implements RegexController {
-
-    public static readonly path = '^/export'
+    public static readonly path = '^/settings/target$'
 
     public async post(request: Request, response: Response) {
 
@@ -14,13 +13,13 @@ export class ExportController implements RegexController {
             return
         }
 
-        const context: TransactionalContext = request
-        const entity = await request.json<Export4Save>()
+        const entity = await request.json<Target>()
 
-        const service = Regex.inject(ExportService)
-        const transaction = await service.register(context, entity)
+        const service = Regex.inject(TargetService)
 
-        response.write(JSON.stringify({ transaction }))
+        await service.save(entity)
+
+        response.write(JSON.stringify({ transaction: request.transaction }))
         response.end()
 
     }
@@ -35,7 +34,7 @@ export class ExportController implements RegexController {
         const parameters = QueryStringHelper.parse(searchParams)
         const { filter = {} } = parameters
 
-        const service = Regex.inject(ExportService)
+        const service = Regex.inject(TargetService)
 
         let count = 0
         service.find(filter).stream()

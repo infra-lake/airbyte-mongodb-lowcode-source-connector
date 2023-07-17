@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  namespace: airbyte-mongodb-lowcode-source
+  namespace: mongodb-exporter
   name: app
 spec:
   progressDeadlineSeconds: 300

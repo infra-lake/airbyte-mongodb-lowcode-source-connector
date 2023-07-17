@@ -2,4 +2,4 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: airbyte-mongodb-lowcode-source
+  name: mongodb-exporter

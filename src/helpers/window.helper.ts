@@ -8,10 +8,10 @@ export type Window = {
 
 export class WindowHelper {
 
-    public static extract(object: any): Window {
+    public static extract(object: any, attribute: string = '__window') {
 
-        const window = (object.__window ?? {}) as Window
-        delete object.__window
+        const window = (object?.[attribute] ?? {}) as Window
+        delete object?.[attribute]
 
         window.begin = ObjectHelper.has(window?.begin) ? DateHelper.parse(window.begin as any) : window?.begin
         window.end = ObjectHelper.has(window?.end) ? DateHelper.parse(window.end as any) : window?.end

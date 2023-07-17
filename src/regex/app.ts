@@ -8,11 +8,17 @@ import { ObjectHelper } from '../helpers/object.helper.js'
 import { ControllerHelper } from '../helpers/controller.helper.js'
 import { ApplicationHelper } from '../helpers/application.helper.js'
 import { AuthHelper } from '../helpers/auth.helper.js'
+import { HTTPHelper } from '../helpers/http.helper.js'
 
-
-export interface Request extends IncomingMessage { 
+export interface TransactionalContext {
+    transaction: string
     logger: Logger
+}
+
+export interface Request extends IncomingMessage, TransactionalContext { 
     getURL(): URL
+    body(): Promise<string>
+    json<T>(): Promise<T>
 }
 
 export interface Response extends ServerResponse {
@@ -34,7 +40,10 @@ async function listener(incomeMessage: IncomingMessage, serverResponse: ServerRe
 
     const request = incomeMessage as any as Request
     request.logger = Regex.register(Logger)
+    request.transaction = request.logger.transaction as string
     request.getURL = () => new URL(request.url as string, `http://${request.headers.host}`)
+    request.body = async () => await HTTPHelper.body(request)
+    request.json = async <T>() => JSON.parse(await request.body()) as T
 
     const response = serverResponse as any as Response
     response.setStatusCode = value =>  {
@@ -73,14 +82,6 @@ async function listener(incomeMessage: IncomingMessage, serverResponse: ServerRe
             return
         }
 
-        if (Array.isArray(controller)) {
-            const controllers = controller.map(({ [RegexField.TYPE]: name }) => name)
-            request.logger.error('there are more than one controller found:', controllers)
-            response.setStatusCode(500)
-            response.end()
-            return
-        }
-
         const method = request.method?.toLocaleLowerCase()
 
         if (!ObjectHelper.has(method)) {
@@ -89,7 +90,25 @@ async function listener(incomeMessage: IncomingMessage, serverResponse: ServerRe
             return
         }
 
-        const handler = (controller as any)[method as string] ?? controller.handle
+        if (Array.isArray(controller)) {
+            
+            const controllers = 
+                (controller as any[])
+                    .filter(_controller => _handler(_controller, method))
+                    .map(_controller => ({ name: _controller[RegexField.TYPE], handler: _handler(_controller, method) }))
+
+            if (controllers.length === 1) {
+                await controllers[0].handler(request, response)
+                return
+            }
+
+            request.logger.error('there are more than one controller found to process this request:', controllers.map(({ name, handler }) => ({ name, handler: handler.name })))
+            response.setStatusCode(500)
+            response.end()
+            return
+        }
+        
+        const handler = _handler(controller, method)
 
         if (!ObjectHelper.has(handler)) {
             const controller = Regex.inject<NotFoundController>('404')
@@ -107,6 +126,10 @@ async function listener(incomeMessage: IncomingMessage, serverResponse: ServerRe
         Regex.unregister(request.logger)
     }
 
+}
+
+function _handler(controller: any, method: string | undefined) {
+    return controller[method as string] ?? controller.handle
 }
 
 function exit(shutdown: Shutdown) {

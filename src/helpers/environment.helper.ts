@@ -29,20 +29,6 @@ export class EnvironmentHelper {
         EnvironmentHelper.set('PROJECT_VERSION', version)
         EnvironmentHelper.set('PROJECT_DESCRIPTION', description)
 
-        if (EnvironmentHelper.get('MONGODB_URI', '') === '') {
-
-            const protocol = EnvironmentHelper.get('MONGODB_PROTOCOL')
-            const host = EnvironmentHelper.get('MONGODB_HOST')
-            const port = EnvironmentHelper.get('MONGODB_PORT', '', result => result === '' ? '' : `:${result}`)
-            const username = EnvironmentHelper.get('MONGODB_USERNAME')
-            const password = EnvironmentHelper.get('MONGODB_PASSWORD')
-
-            const qs = QueryStringHelper.transform(EnvironmentHelper.get('MONGODB_QS', ''))
-
-            EnvironmentHelper.set('MONGODB_URI', `${protocol}://${username}:${password}@${host}${port}${qs}`)
-        
-        }
-
         this.configured = true
 
     }

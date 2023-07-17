@@ -1,7 +1,7 @@
 {
-  "name": "airbyte-mongodb-lowcode-source",
+  "name": "mongodb-exporter",
   "version": "1.2.15",
-  "description": "Another option to connect Mongodb on Airbyte as a Source",
+  "description": "Mongodb Exporter",
   "main": "src/index.mjs",
   "scripts": {
     "build": "rm -rf dist;tsc",
@@ -12,7 +12,6 @@
     "url": "git+https://github.com/infra-lake/airbyte-mongodb-lowcode-source.git"
   },
   "keywords": [
-    "airbyte",
     "mongodb"
   ],
   "author": "Herberton Candido Souza",
@@ -22,12 +21,14 @@
   },
   "homepage": "https://github.com/infra-lake/airbyte-mongodb-lowcode-source#readme",
   "dependencies": {
+    "@google-cloud/bigquery": "^6.2.1",
     "@types/js-yaml": "^4.0.5",
     "dotenv": "^16.1.4",
     "handlebars": "^4.7.7",
     "mongodb": "^5.6.0",
     "prom-client": "^14.2.0",
-    "qs": "^6.11.2"
+    "qs": "^6.11.2",
+    "redis": "^4.6.7"
   },
   "devDependencies": {
     "@types/qs": "^6.9.7",

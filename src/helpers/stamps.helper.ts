@@ -9,16 +9,16 @@ export type Stamps = {
 
 export class StampsHelper {
 
-    public static extract(object: any): Stamps {
+    public static extract(object: any, attribute: string = '__stamps') {
 
-        const stamps = (object.__stamps ?? {}) as Stamps
+        const stamps = (object?.[attribute] ?? {}) as Stamps
 
-        delete object.__stamps
+        delete object?.[attribute]
         
-        stamps.id = stamps.id ?? EnvironmentHelper.get('DEFAULT_STAMPS_ID', '_id')
-        stamps.limit = stamps.limit ?? EnvironmentHelper.get('DEFAULT_STAMPS_LIMIT', '1000')
-        stamps.insert = stamps.insert ?? EnvironmentHelper.get('DEFAULT_STAMPS_INSERT', 'createdAt')
-        stamps.update = stamps.update ?? EnvironmentHelper.get('DEFAULT_STAMPS_UPDATE', 'updatedAt')
+        stamps.id = stamps.id ?? EnvironmentHelper.get('DEFAULT_STAMP_ID', '_id')
+        stamps.limit = stamps.limit ?? EnvironmentHelper.get('DEFAULT_STAMP_LIMIT', '1000')
+        stamps.insert = stamps.insert ?? EnvironmentHelper.get('DEFAULT_STAMP_INSERT', 'createdAt')
+        stamps.update = stamps.update ?? EnvironmentHelper.get('DEFAULT_STAMP_UPDATE', 'updatedAt')
 
         return stamps
 

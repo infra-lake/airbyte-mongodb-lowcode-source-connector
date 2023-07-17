@@ -1,51 +1,66 @@
-import { CountOptions, FindOptions, MongoClient, WithId } from 'mongodb'
+import { AggregateOptions, CountOptions, Document, FindCursor, FindOptions, MongoClient, WithId } from 'mongodb'
 import Stream from 'stream'
-import { Regex } from '../regex'
+import { ObjectHelper } from './object.helper'
+import { Stamps } from './stamps.helper'
+import { Window } from './window.helper'
+
+export interface MongoDBDocument<T extends MongoDBDocument<T, K>, K extends keyof T> {
+
+}
+
+export type DatabasesInput = { client: MongoClient }
+export type CollectionsInput = { client: MongoClient, database: string }
+export type FindInput<T extends Document = Document> = { client: MongoClient, database: string, collection: string, filter: T, options?: FindOptions<T> }
+export type GetInput<T extends MongoDBDocument<T, K>, K extends keyof T> = { client: MongoClient, database: string, collection: string, id: Pick<T, K> }
+export type CountInput<T extends Document = Document> = { client: MongoClient, database: string, collection: string, filter: T, options?: CountOptions }
+export type ExistsInput<T extends Document = Document> = CountInput<T>
+export type SaveInput<T extends MongoDBDocument<T, K>, K extends keyof T> = { client: MongoClient, database: string, collection: string, id: Pick<T, K>, document: T }
+export type LastInput = { client: MongoClient, database: string, collection: string, match: any, id: string, sortBy: any, output: string[] }
 
 export class MongoDBHelper {
 
-    public async databases() {
+    private constructor() { }
 
-        const momgodb = Regex.inject(MongoClient)
-
-        const result = await momgodb.db().admin().listDatabases()
-
+    public static async databases({ client }: DatabasesInput) {
+        const result = await client.db().admin().listDatabases()
         return result.databases
-
     }
 
-    public async collections(database: string) {
-
-        const momgodb = Regex.inject(MongoClient)
-
-        const result = await momgodb.db(database).collections()
-
+    public static async collections({ client, database }: CollectionsInput) {
+        const result = await client.db(database).collections()
         return result
-
     }
 
-    public find<T extends Document = Document>(database: string, collection: string, filter: T, options: FindOptions<T>): Stream.Readable & AsyncIterable<WithId<T>> {
-
-        const mongodb = Regex.inject(MongoClient)
-        
-        const result = mongodb.db(database).collection(collection).find(filter, options)
-
-        if ('sort' in options && options.sort !== null && options.sort !== undefined) {
-            return result.allowDiskUse().stream()
+    public static find<T extends Document = Document>({ client, database, collection, filter, options }: FindInput<T>) {
+        const result = client.db(database).collection(collection).find<T>(filter, options)
+        if (ObjectHelper.has(options?.sort)) {
+            return result.allowDiskUse()
         }
-        
-        return result.stream()
-
+        return result
     }
 
-    public async count<T extends Document = Document>(database: string, collection: string, filter: T, options: CountOptions) {
+    public static async get<T extends MongoDBDocument<T, K>, K extends keyof T>({ client, database, collection, id }: GetInput<T, K>): Promise<T | undefined> {
+        const result = await client.db(database).collection(collection).findOne<T>(id)
+        return result ?? undefined
+    }
 
-        const mongodb = Regex.inject(MongoClient)
-        
-        const result = await mongodb.db(database).collection(collection).countDocuments(filter, options)
-
+    public static async count<T extends Document = Document>({ client, database, collection, filter, options }: CountInput<T>) {
+        const result = await client.db(database).collection(collection).countDocuments(filter, options)
         return result
+    }
 
+    public static async exists<T extends Document = Document>(input: ExistsInput<T>) {
+        const count = await MongoDBHelper.count(input)
+        const result = count > 0
+        return result
+    }
+
+    public static async save<T extends MongoDBDocument<T, K>, K extends keyof T>({ client, database, collection, id, document }: SaveInput<T, K>) {
+        if (await MongoDBHelper.exists({ client, database, collection, filter: id })) {
+            await client.db(database).collection(collection).findOneAndReplace(id, document, { upsert: true })
+            return
+        }
+        await client.db(database).collection(collection).insertOne(document)
     }
 
 }
