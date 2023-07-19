@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto'
-import { Request } from './app'
+import { HTTPIncomingMessage } from './http'
 
 export class Logger {
 
@@ -11,7 +11,7 @@ export class Logger {
         this._transaction = randomUUID()
     }
 
-    public static from(request: Request) {
+    public static from(request: HTTPIncomingMessage) {
         return request.logger as Logger
     }
 

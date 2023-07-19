@@ -1,16 +1,11 @@
-import { BigQueryTimestamp } from '@google-cloud/bigquery'
-import { createHash } from 'crypto'
 import { Document, FindOptions, MongoClient } from 'mongodb'
-import { commandOptions } from 'redis'
 import { BadRequestError } from '../exceptions/badrequest.error'
 import { EnvironmentHelper } from '../helpers/environment.helper'
 import { MongoDBDocument, MongoDBHelper } from '../helpers/mongodb.helper'
 import { ObjectHelper } from '../helpers/object.helper'
-import { RedisHelper } from '../helpers/redis.helper'
 import { Stamps, StampsHelper } from '../helpers/stamps.helper'
 import { Window } from '../helpers/window.helper'
 import { Regex, TransactionalContext } from '../regex'
-import { ExportWorkerTask } from '../workers/export.worker.task'
 import { SettingsService } from './settings.service'
 import { SourceService } from './source.service'
 import { TargetService } from './target.service'
@@ -27,6 +22,7 @@ export interface ExportTarget {
 
 export interface ExportSettings {
     attempts: number
+    limit: number
     stamps: Stamps
 }
 
@@ -45,9 +41,42 @@ export type Export4Save = Pick<Export, 'source' | 'target' | 'settings'>
 export class ExportService {
 
     private static readonly DEFAULT_EXPORT_ATTEMPS = '3'
+    private static readonly DEFAULT_EEXPORT_LIMIT = '1000'
     public static readonly COLLECTION = 'exports'
 
-    private tasks: Record<string, Record<string, ExportWorkerTask>> = {}
+    public static filter(stamps: Stamps, window: Window): Document {
+
+        const date = {
+            $ifNull: [
+                `$${stamps.update}`,
+                `$${StampsHelper.DEFAULT_STAMP_UPDATE}`,
+                '$updatedAt',
+                '$updated_at',
+                `$${stamps.insert}`,
+                `$${StampsHelper.DEFAULT_STAMP_INSERT}`,
+                '$createdAt',
+                '$created_at',
+                {
+                    $convert: {
+                        input: `$${stamps.id}`,
+                        to: 'date',
+                        onError: window.end,
+                        onNull: window.end
+                    }
+                }
+            ]
+        }
+
+        return {
+            $expr: {
+                $and: [ 
+                    { $gt: [ date, window.begin ] },
+                    { $lte: [ date, window.end ] }
+                ]
+            }
+        }
+
+    }
 
     public find(filter: Export, options?: FindOptions<Export>) {
         const client = Regex.inject(MongoClient)
@@ -62,16 +91,10 @@ export class ExportService {
 
         const output = await this.save(context, input)
 
-        const key = `exports:${output.source.name}:${output.source.database}:${output.source.collection}:${output.target.name}`
+        const topic = `export:${output.source.name}:${output.source.database}:${output.source.collection}:${output.target.name}`
 
-        if (!(key in this.tasks)) {
-            await this.follow(context, key)
-        }
-
-        this.tasks[key][output.transaction] = new ExportWorkerTask(context, output)
-
-        const redis = Regex.inject(RedisHelper)
-        await redis.client.xAdd(key, '*', { transaction: output.transaction })
+        // const redis = Regex.inject(RedisHelper)
+        // await redis.client.xAdd(topic, '*', { transaction: output.transaction })
 
         return output.transaction
 
@@ -83,6 +106,7 @@ export class ExportService {
 
         document.settings = document.settings ?? {}
         document.settings.attempts = document.settings.attempts ?? parseInt(EnvironmentHelper.get('EXPORT_ATTEMPS', ExportService.DEFAULT_EXPORT_ATTEMPS))
+        document.settings.limit = document.settings.limit ?? parseInt(EnvironmentHelper.get('EXPORT_LIMIT', ExportService.DEFAULT_EEXPORT_LIMIT))
         document.settings.stamps = StampsHelper.extract(document.settings, 'stamps');
 
         (document as Export).window = {
@@ -186,185 +210,79 @@ export class ExportService {
 
     }
 
-    private async follow(context: TransactionalContext, key: string) {
-        
-        if (key in this.tasks) {
-            return
-        }
+    // public async subscribe() {
 
-        this.tasks[key] = {}
+    //     const redis = Regex.inject(RedisHelper)
 
-        const redis = Regex.inject(RedisHelper)
-        
-        await redis.client.xGroupCreate(key, key, '$', { MKSTREAM: true })
+    //     await redis.client.xGroupCreate(key, key, '$', { MKSTREAM: true })
 
-        const behaviour = async () => {
-            
-            const events = await redis.client.xReadGroup(commandOptions({ isolated: true }), key, 'exporter', [{ key, id: '>' }], { COUNT: 1, BLOCK: 0 })
+    //     const behaviour = async () => {
 
-            if (events) {
-                
-                const client = Regex.inject(MongoClient)
-                const { database } = Regex.inject(SettingsService)
-                const collection = ExportService.COLLECTION
-                
-                await Promise.all(events.flatMap(({ name, messages }) => {
+    //         const events = await redis.client.xReadGroup(commandOptions({ isolated: true }), key, 'exporter', [{ key, id: '>' }], { COUNT: 1, BLOCK: 0 })
 
-                    return messages.flatMap(async ({ id, message }) => {
+    //         if (events) {
 
-                        const { transaction } = message 
-                        const task = this.tasks[key][transaction]
-                        
-                        const { data } = task
-                        const { source, target } = data
-                        
-                        context.logger.log(`new event message received:`, { name, id })
-                        
-                        try {
+    //             const client = Regex.inject(MongoClient)
+    //             const { database } = Regex.inject(SettingsService)
+    //             const collection = ExportService.COLLECTION
 
-                            await task.run()
+    //             await Promise.all(events.flatMap(({ name, messages }) => {
 
-                            context.logger.log(`task "${task.name}" finished successfully`)
-                            task.data.status = 'success'
-                            
-                            await MongoDBHelper.save({ 
-                                client, 
-                                database, 
-                                collection, 
-                                id: { transaction, source, target }, 
-                                document: task.data 
-                            })
+    //                 return messages.flatMap(async ({ id, message }) => {
 
-                        } catch (error: any) {
-                            
-                            const _message = `worker ${task.name} was not finished`
-                            context.logger.error(_message, error)
-                            task.data.status = 'error'
-                            task.data.error = { message: 'message' in error ? error.message : _message, cause: 'cause' in error ? error.cause : error }
-                        
-                            await MongoDBHelper.save({ 
-                                client, 
-                                database, 
-                                collection, 
-                                id: { transaction, source, target }, 
-                                document: task.data 
-                            })
-                        
-                        } finally {
-                            delete this.tasks[key][transaction]
-                            await redis.client.xAck(key, 'exporter', id)
-                        }
-                        
-                    })
+    //                     const { transaction } = message
+    //                     const task = this.tasks[key][transaction]
 
-                }))
+    //                     const { data } = task
+    //                     const { source, target } = data
 
-            }
+    //                     context.logger.log(`new event message received:`, { name, id })
 
-        }
+    //                     try {
 
-        setInterval(() => behaviour().then().catch(context.logger.error), 1000)
+    //                         await task.run()
 
-    }
+    //                         context.logger.log(`task "${task.name}" finished successfully`)
+    //                         task.data.status = 'success'
 
-    public static filter(stamps: Stamps, window: Window): Document {
+    //                         await MongoDBHelper.save({
+    //                             client,
+    //                             database,
+    //                             collection,
+    //                             id: { transaction, source, target },
+    //                             document: task.data
+    //                         })
 
-        return {
-            $expr: {
-                $and: [
-                    {
-                        $gt: [
-                            {
-                                $ifNull: [
-                                    `$${stamps.update}`,
-                                    `$updatedAt`,
-                                    `$${stamps.insert}`,
-                                    `$createdAt`,
-                                    {
-                                        $convert: {
-                                            input: `$${stamps.id}`,
-                                            to: "date",
-                                            onError: window.end,
-                                            onNull: window.end
-                                        }
-                                    }
-                                ]
-                            },
-                            window.begin
-                        ]
-                    },
-                    {
-                        $lte: [
-                            {
-                                $ifNull: [
-                                    `$${stamps.update}`,
-                                    `$updatedAt`,
-                                    `$${stamps.insert}`,
-                                    `$createdAt`,
-                                    {
-                                        $convert: {
-                                            input: `$${stamps.id}`,
-                                            to: "date",
-                                            onError: window.end,
-                                            onNull: window.end
-                                        }
-                                    }
-                                ]
-                            },
-                            window.end
-                        ]
-                    }
-                ]
-            }
-        }
+    //                     } catch (error: any) {
 
-    }
+    //                         const _message = `worker ${task.name} was not finished`
+    //                         context.logger.error(_message, error)
+    //                         task.data.status = 'error'
+    //                         task.data.error = { message: 'message' in error ? error.message : _message, cause: 'cause' in error ? error.cause : error }
 
-    public static row(chunk: any, { id }: Pick<Stamps, 'id'>, date?: Date) {
+    //                         await MongoDBHelper.save({
+    //                             client,
+    //                             database,
+    //                             collection,
+    //                             id: { transaction, source, target },
+    //                             document: task.data
+    //                         })
 
-        const data = JSON.stringify(ExportService.fix(chunk))
+    //                     } finally {
+    //                         delete this.tasks[key][transaction]
+    //                         await redis.client.xAck(key, 'exporter', id)
+    //                     }
 
-        return {
-            [id]: chunk[id].toString(),
-            [EnvironmentHelper.get('DEFAULT_STAMP_INSERT', 'createdAt')]: new BigQueryTimestamp(date ?? new Date()),
-            data,
-            hash: createHash('md5').update(data).digest('hex')
-        }
+    //                 })
 
-    }
+    //             }))
 
-    private static fix(object: any): any {
+    //         }
 
-        if (!ObjectHelper.has(object)) {
-            return object
-        }
+    //     }
+    //     // await new Promise(resolve => setInterval(resolve, 1000))
+    //     setInterval(() => behaviour().then().catch(context.logger.error), 1000)
 
-        if (Array.isArray(object)) {
-            object.forEach(ExportService.fix)
-            return object
-        }
-
-        if (typeof object === 'object') {
-
-            Object.keys(object).forEach(key => {
-
-                if (key.trim() === '') {
-                    const value = object[key]
-                    delete object[key]
-                    object['__empty__'] = ExportService.fix(value)
-                    return
-                }
-
-                object[key] = ExportService.fix(object[key])
-
-            })
-
-            return object
-
-        }
-
-        return object
-
-    }
+    // }
 
 }

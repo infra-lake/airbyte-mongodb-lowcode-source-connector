@@ -10,10 +10,27 @@ export class SettingsService {
     public get database() { return EnvironmentHelper.get('MONGODB_DATABASE') as string }
 
     public async migrate() {
+
         const mongodb = Regex.inject(MongoClient)
-        await mongodb.db(this.database).createCollection(SourceService.COLLECTION)
-        await mongodb.db(this.database).createCollection(TargetService.COLLECTION)
-        await mongodb.db(this.database).createCollection(ExportService.COLLECTION)
+        
+        const collections = await mongodb.db(this.database).collections()
+        
+        const source = SourceService.COLLECTION
+        const target = TargetService.COLLECTION
+        const _export = ExportService.COLLECTION
+        
+        if (collections.filter(({ collectionName }) => collectionName === source).length <= 0) {
+            await mongodb.db(this.database).createCollection(source)
+        }
+        
+        if (collections.filter(({ collectionName }) => collectionName === target).length <= 0) {
+            await mongodb.db(this.database).createCollection(target)
+        }
+        
+        if (collections.filter(({ collectionName }) => collectionName === _export).length <= 0) {
+            await mongodb.db(this.database).createCollection(_export)
+        }
+
     }
 
 }

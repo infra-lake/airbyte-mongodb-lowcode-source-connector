@@ -10,18 +10,17 @@ import { TargetSettingsController } from './controllers/settings/target.controll
 import { ApplicationHelper } from './helpers/application.helper'
 import { EnvironmentHelper } from './helpers/environment.helper'
 import { MetricHelper } from './helpers/metric.helper'
-import { RedisHelper } from './helpers/redis.helper'
-import { Logger, Regex, RegexApplication, Server } from './regex'
+import { Logger, Regex, RegexApplication, StartupInput } from './regex'
 import { ExportService } from './services/export.service'
 import { SettingsService } from './services/settings.service'
 import { SourceService } from './services/source.service'
 import { TargetService } from './services/target.service'
+import { WorkerController } from './controllers/worker.controller'
 
 EnvironmentHelper.config()
 MetricHelper.config()
 
 Regex.register(MongoClient, EnvironmentHelper.get('MONGODB_URL'))
-Regex.register(RedisHelper, EnvironmentHelper.get('REDIS_URL'))
 Regex.register(SettingsService)
 Regex.register(SourceService)
 Regex.register(TargetService)
@@ -35,18 +34,17 @@ Regex.controller(SourceSettingsController)
 Regex.controller(TargetSettingsController)
 Regex.controller(ExportController)
 Regex.controller(ExploreController)
+Regex.controller(WorkerController)
 
 RegexApplication.create({
-    startup: async (server: Server) => {
+    settings: { http: true, amqp: true },
+    startup: async ({ http }: StartupInput) => {
 
         const settings = Regex.inject(SettingsService)
         await settings.migrate()
 
-        const redis = Regex.inject(RedisHelper)
-        await redis.connect()
-
         const port = ApplicationHelper.PORT
-        server.listen(port, () => {
+        http?.server.listen(port, () => {
             const logger = Regex.register(Logger)
             logger.log('airbyte-mongodb-lowcode-source was successfully started on port', port)
             Regex.unregister(logger)

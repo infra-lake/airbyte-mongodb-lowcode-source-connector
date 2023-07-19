@@ -1,9 +1,9 @@
 import { BadRequestError } from "../exceptions/badrequest.error";
-import { Logger, Request, Response } from "../regex";
+import { Logger, HTTPIncomingMessage, HTTPServerResponse } from "../regex";
 
 export class ControllerHelper {
 
-    public static catch(request: Request, response: Response, error: any) {
+    public static catch(request: HTTPIncomingMessage, response: HTTPServerResponse, error: any) {
         
         const logger = Logger.from(request)
 

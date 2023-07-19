@@ -6,15 +6,15 @@ import { QueryStringHelper } from '../helpers/querystring.helper'
 import { Stamps, StampsHelper } from '../helpers/stamps.helper'
 import { StreamHelper } from '../helpers/stream.helper'
 import { Window, WindowHelper } from '../helpers/window.helper'
-import { Regex, RegexController, Request, Response } from '../regex'
+import { Regex, RegexHTTPController, HTTPIncomingMessage, HTTPServerResponse } from '../regex'
 import { ExportService } from '../services/export.service'
 import { Source, SourceService } from '../services/source.service'
 
-export class ExploreController implements RegexController {
+export class ExploreController implements RegexHTTPController {
 
     public static readonly path = '^/explore'
 
-    public async get(request: Request, response: Response) {
+    public async get(request: HTTPIncomingMessage, response: HTTPServerResponse) {
 
         if (!AuthHelper.validate(request, response)) {
             return
@@ -85,7 +85,7 @@ type ExportControllerInput<T extends Document> = {
     parameters: ExportControllerQueryParameters<T>
 }
 
-async function _input<T extends Document>(request: Request): Promise<ExportControllerInput<T>> {
+async function _input<T extends Document>(request: HTTPIncomingMessage): Promise<ExportControllerInput<T>> {
 
     const { searchParams, pathname } = request.getURL()
     const [_, _source, database, collection, hash] = pathname.split('/').filter(value => value)

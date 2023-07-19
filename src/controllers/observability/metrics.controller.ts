@@ -1,11 +1,11 @@
 import { MetricHelper } from '../../helpers/metric.helper'
-import { RegexController, Request, Response } from '../../regex'
+import { RegexHTTPController, HTTPIncomingMessage, HTTPServerResponse } from '../../regex'
 
-export class MetricsController implements RegexController {
+export class MetricsController implements RegexHTTPController {
 
     public static readonly path = '^/metrics$'
 
-    public async get(request: Request, response: Response) {
+    public async get(request: HTTPIncomingMessage, response: HTTPServerResponse) {
         response.setHeader('Content-Type', MetricHelper.contentType)
         response.setStatusCode(200)
         response.write(await MetricHelper.payload())

@@ -1,11 +1,11 @@
 import { AuthHelper } from '../../helpers/auth.helper'
-import { RegexController, Request, Response } from '../../regex'
+import { RegexHTTPController, HTTPIncomingMessage, HTTPServerResponse } from '../../regex'
 
-export class SettingsController implements RegexController {
+export class SettingsController implements RegexHTTPController {
 
     public static readonly path = '^/settings$'
 
-    public async get(request: Request, response: Response) {
+    public async get(request: HTTPIncomingMessage, response: HTTPServerResponse) {
 
         if (!AuthHelper.validate(request, response)) {
             return

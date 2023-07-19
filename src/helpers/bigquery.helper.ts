@@ -1,9 +1,8 @@
-import { BigQuery, Dataset, TableSchema } from "@google-cloud/bigquery";
-import { BadRequestError } from "../exceptions/badrequest.error";
-import { Logger, Request, Response } from "../regex";
+import { BigQuery, TableSchema } from "@google-cloud/bigquery";
 
 export type DatasetInput = { client: BigQuery, name: string }
-export type TableInput = { client: BigQuery, dataset: string, table: TableSchema & { name: string }  }
+export type TableInput = { client: BigQuery, dataset: string, table: TableSchema & { name: string } }
+export type SanitizeInput = { value: string, to: 'dataset-name' | 'table-name' | 'sql' }
 
 export class BigQueryHelper {
 
@@ -33,6 +32,18 @@ export class BigQueryHelper {
 
         return result
 
+    }
+
+    public static sanitize({ value, to }: SanitizeInput) {
+        
+        const result = value.trim().replace(/\-/g, '_').replace(/\./g, '_').replace(/\s/g, '_')
+        
+        if (to === 'sql') {
+            return `\`${result.replace(/\./g, '`.`')}\``
+        }
+
+        return result
+    
     }
 
 }

@@ -1,11 +1,15 @@
 services:
 
-  # Redis #############################################################
-  redis:
-    image: redis
-    container_name: ${REDIS_HOST:-redis}
+  # Rabbitmq ##########################################################
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
     ports:
-    - 6379:6379
+      - 5672:5672
+      - 15672:15672
+    environment:
+      - RABBITMQ_DEFAULT_USER=rabbitmq
+      - RABBITMQ_DEFAULT_PASS=rabbitmq
     restart: always
 
   # MongoDB ###########################################################

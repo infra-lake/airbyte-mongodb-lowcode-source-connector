@@ -1,14 +1,14 @@
 import { AuthHelper } from '../helpers/auth.helper'
 import { QueryStringHelper } from '../helpers/querystring.helper'
-import { Regex, RegexController, Request, Response, TransactionalContext } from '../regex'
+import { Regex, RegexHTTPController, HTTPIncomingMessage, HTTPServerResponse, TransactionalContext } from '../regex'
 import { Export4Save, ExportService } from '../services/export.service'
 
 
-export class ExportController implements RegexController {
+export class ExportController implements RegexHTTPController {
 
     public static readonly path = '^/export'
 
-    public async post(request: Request, response: Response) {
+    public async post(request: HTTPIncomingMessage, response: HTTPServerResponse) {
 
         if (!AuthHelper.validate(request, response)) {
             return
@@ -25,7 +25,7 @@ export class ExportController implements RegexController {
 
     }
 
-    public async get(request: Request, response: Response) {
+    public async get(request: HTTPIncomingMessage, response: HTTPServerResponse) {
 
         if (!AuthHelper.validate(request, response)) {
             return

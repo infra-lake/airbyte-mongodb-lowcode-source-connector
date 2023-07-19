@@ -1,8 +1,8 @@
-import { WorkerTaskFailedException } from '../exceptions/worker.task.failed.exception'
+import { WorkerRunFailedException } from '../exceptions/worker.run.failed.exception'
 import { ThreadHelper } from '../helpers/thread.helper'
 import { Logger } from './logger'
 
-export abstract class WorkerTask {
+export abstract class Worker {
 
     public abstract get name(): string
     protected abstract get attempts(): number
@@ -38,7 +38,7 @@ export abstract class WorkerTask {
                 errors.push(error as Error)
 
                 if (!tryAgain) {
-                    throw new WorkerTaskFailedException(this, errors)
+                    throw new WorkerRunFailedException(this, errors)
                 }
 
                 await this.backOff(attempt)

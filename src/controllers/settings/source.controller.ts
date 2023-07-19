@@ -1,13 +1,13 @@
 import { AuthHelper } from '../../helpers/auth.helper'
 import { QueryStringHelper } from '../../helpers/querystring.helper'
-import { Regex, RegexController, Request, Response } from '../../regex'
+import { Regex, RegexHTTPController, HTTPIncomingMessage, HTTPServerResponse } from '../../regex'
 import { Source, SourceService } from '../../services/source.service'
 
-export class SourceSettingsController implements RegexController {
+export class SourceSettingsController implements RegexHTTPController {
 
     public static readonly path = '^/settings/source$'
 
-    public async post(request: Request, response: Response) {
+    public async post(request: HTTPIncomingMessage, response: HTTPServerResponse) {
 
         if (!AuthHelper.validate(request, response)) {
             return
@@ -24,7 +24,7 @@ export class SourceSettingsController implements RegexController {
 
     }
 
-    public async get(request: Request, response: Response) {
+    public async get(request: HTTPIncomingMessage, response: HTTPServerResponse) {
 
         if (!AuthHelper.validate(request, response)) {
             return

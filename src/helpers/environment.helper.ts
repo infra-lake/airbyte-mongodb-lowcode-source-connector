@@ -1,19 +1,24 @@
 import dotenv from 'dotenv'
 import fs from 'fs'
-import { QueryStringHelper } from './querystring.helper'
+import { StringHelper } from './string.helper'
 
 export class EnvironmentHelper {
 
     private static configured = false
 
-    public static get<T extends string | undefined>(name: string, _default?: T, transform?: (result: T) => T): T extends string ? string : undefined {
-        const environment = process.env[name]?.trim() ?? _default
-        const result = transform !== null && transform !== undefined ? transform(environment as T) : environment
-        return result as T extends string ? string : undefined
+    public static get(name: string, _default?: string): string {
+
+        const result =
+            StringHelper.empty(process.env[name])
+                ? _default ?? ''
+                : process.env[name]?.trim() as string
+
+        return result
+
     }
 
-    public static set(name: string, value: string) {
-        process.env[name] = value.trim()
+    public static set(name: string, value?: string) {
+        process.env[name] = value?.trim()
     }
 
     public static config() {
