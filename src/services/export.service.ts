@@ -3,6 +3,7 @@ import { BadRequestError } from '../exceptions/badrequest.error'
 import { EnvironmentHelper } from '../helpers/environment.helper'
 import { MongoDBDocument, MongoDBHelper } from '../helpers/mongodb.helper'
 import { ObjectHelper } from '../helpers/object.helper'
+import { RabbitMQHelper } from '../helpers/rabbitmq.helper'
 import { Stamps, StampsHelper } from '../helpers/stamps.helper'
 import { Window } from '../helpers/window.helper'
 import { Regex, TransactionalContext } from '../regex'
@@ -36,13 +37,17 @@ export interface Export extends MongoDBDocument<Export, 'transaction' | 'source'
     error?: { message: string, cause: any }
 }
 
-export type Export4Save = Pick<Export, 'source' | 'target' | 'settings'>
+export type Export4Create = Pick<Export, 'transaction' | 'source' | 'target' | 'settings'>
+export type Export4Update = Pick<Export, 'status' | 'error'>
 
 export class ExportService {
 
     private static readonly DEFAULT_EXPORT_ATTEMPS = '3'
-    private static readonly DEFAULT_EEXPORT_LIMIT = '1000'
+    private static readonly DEFAULT_EXPORT_LIMIT = '1000'
     public static readonly COLLECTION = 'exports'
+
+    public static get EXPORT_ATTEMPS() { return parseInt(EnvironmentHelper.get('EXPORT_ATTEMPS', ExportService.DEFAULT_EXPORT_ATTEMPS)) }
+    public static get EXPORT_LIMIT() { return parseInt(EnvironmentHelper.get('EXPORT_LIMIT', ExportService.DEFAULT_EXPORT_LIMIT)) }
 
     public static filter(stamps: Stamps, window: Window): Document {
 
@@ -69,63 +74,103 @@ export class ExportService {
 
         return {
             $expr: {
-                $and: [ 
-                    { $gt: [ date, window.begin ] },
-                    { $lte: [ date, window.end ] }
+                $and: [
+                    { $gt: [date, window.begin] },
+                    { $lte: [date, window.end] }
                 ]
             }
         }
 
     }
 
-    public find(filter: Export, options?: FindOptions<Export>) {
+    public find(filter: Partial<Export>, options?: FindOptions<Export>) {
         const client = Regex.inject(MongoClient)
         const { database } = Regex.inject(SettingsService)
         const result = MongoDBHelper.find({ client, database, collection: ExportService.COLLECTION, filter, options })
         return result
     }
 
-    public async register(context: TransactionalContext, input: Export4Save) {
+    public async get({ transaction, source, target }: Pick<Export, 'transaction' | 'source' | 'target'>) {
 
-        await this.validate(input)
+        const cursor = this.find({ transaction, source, target })
 
-        const output = await this.save(context, input)
+        if (await cursor.hasNext()) {
+            return await cursor.next() as Export
+        }
 
-        const topic = `export:${output.source.name}:${output.source.database}:${output.source.collection}:${output.target.name}`
-
-        // const redis = Regex.inject(RedisHelper)
-        // await redis.client.xAdd(topic, '*', { transaction: output.transaction })
-
-        return output.transaction
+        return undefined
 
     }
 
-    private async save({ transaction }: Pick<TransactionalContext, 'transaction'>, document: Export4Save): Promise<Export> {
+    public async create(input: Export4Create) {
 
-        (document as Export).transaction = transaction
+        await this.validate(input);
 
-        document.settings = document.settings ?? {}
-        document.settings.attempts = document.settings.attempts ?? parseInt(EnvironmentHelper.get('EXPORT_ATTEMPS', ExportService.DEFAULT_EXPORT_ATTEMPS))
-        document.settings.limit = document.settings.limit ?? parseInt(EnvironmentHelper.get('EXPORT_LIMIT', ExportService.DEFAULT_EEXPORT_LIMIT))
-        document.settings.stamps = StampsHelper.extract(document.settings, 'stamps');
+        input.settings = input.settings ?? {}
+        input.settings.attempts = input.settings.attempts ?? ExportService.EXPORT_ATTEMPS
+        input.settings.limit = input.settings.limit ?? ExportService.EXPORT_LIMIT
+        input.settings.stamps = StampsHelper.extract(input.settings, 'stamps');
 
-        (document as Export).window = {
-            begin: await this.last(document),
+        (input as Export).window = {
+            begin: await this.last(input),
             end: new Date()
         };
 
-        (document as Export).status = 'pending'
+        (input as Export).status = 'pending'
 
         const client = Regex.inject(MongoClient)
         const { database } = Regex.inject(SettingsService)
-        const id = { transaction, source: document.source, target: document.target }
-        await MongoDBHelper.save({ client, database, collection: ExportService.COLLECTION, id, document: document as Export })
+        const id = { transaction: input.transaction, source: input.source, target: input.target }
 
-        return document as Export
+        await MongoDBHelper.save({
+            client,
+            database,
+            collection: ExportService.COLLECTION,
+            id,
+            document: input as Export
+        })
+
+        const queue = `export:${id.source.name}:${id.source.database}:${id.source.collection}:${id.target.name}`
+
+        await RabbitMQHelper.assert({
+            kind: 'queue',
+            name: queue,
+            options: { durable: true }
+        })
+
+        await RabbitMQHelper.produce({
+            queue,
+            content: JSON.stringify({ transaction: id.transaction }),
+            options: {
+                correlationId: id.transaction
+            }
+        })
+
+        return input.transaction
 
     }
 
-    private async last({ source, target }: Pick<Export4Save, 'source' | 'target'>): Promise<Date> {
+    public async update({ transaction, source, target }: Pick<Export, 'transaction' | 'source' | 'target'>, { status, error }: Export4Update) {
+
+        const document = await this.get({ transaction, source, target }) as Export
+
+        document.status = status
+        document.error = error
+
+        const client = Regex.inject(MongoClient)
+        const { database } = Regex.inject(SettingsService)
+
+        await MongoDBHelper.save({
+            client,
+            database,
+            collection: ExportService.COLLECTION,
+            id: { transaction, source, target },
+            document
+        })
+
+    }
+
+    private async last({ source, target }: Pick<Export4Create, 'source' | 'target'>): Promise<Date> {
 
         const client = Regex.inject(MongoClient)
         const { database } = Regex.inject(SettingsService)
@@ -144,7 +189,7 @@ export class ExportService {
 
     }
 
-    public async validate(document: Export4Save) {
+    public async validate(document: Export4Create) {
 
         if (!ObjectHelper.has(document)) {
             throw new BadRequestError('export is empty')
@@ -209,80 +254,5 @@ export class ExportService {
         }
 
     }
-
-    // public async subscribe() {
-
-    //     const redis = Regex.inject(RedisHelper)
-
-    //     await redis.client.xGroupCreate(key, key, '$', { MKSTREAM: true })
-
-    //     const behaviour = async () => {
-
-    //         const events = await redis.client.xReadGroup(commandOptions({ isolated: true }), key, 'exporter', [{ key, id: '>' }], { COUNT: 1, BLOCK: 0 })
-
-    //         if (events) {
-
-    //             const client = Regex.inject(MongoClient)
-    //             const { database } = Regex.inject(SettingsService)
-    //             const collection = ExportService.COLLECTION
-
-    //             await Promise.all(events.flatMap(({ name, messages }) => {
-
-    //                 return messages.flatMap(async ({ id, message }) => {
-
-    //                     const { transaction } = message
-    //                     const task = this.tasks[key][transaction]
-
-    //                     const { data } = task
-    //                     const { source, target } = data
-
-    //                     context.logger.log(`new event message received:`, { name, id })
-
-    //                     try {
-
-    //                         await task.run()
-
-    //                         context.logger.log(`task "${task.name}" finished successfully`)
-    //                         task.data.status = 'success'
-
-    //                         await MongoDBHelper.save({
-    //                             client,
-    //                             database,
-    //                             collection,
-    //                             id: { transaction, source, target },
-    //                             document: task.data
-    //                         })
-
-    //                     } catch (error: any) {
-
-    //                         const _message = `worker ${task.name} was not finished`
-    //                         context.logger.error(_message, error)
-    //                         task.data.status = 'error'
-    //                         task.data.error = { message: 'message' in error ? error.message : _message, cause: 'cause' in error ? error.cause : error }
-
-    //                         await MongoDBHelper.save({
-    //                             client,
-    //                             database,
-    //                             collection,
-    //                             id: { transaction, source, target },
-    //                             document: task.data
-    //                         })
-
-    //                     } finally {
-    //                         delete this.tasks[key][transaction]
-    //                         await redis.client.xAck(key, 'exporter', id)
-    //                     }
-
-    //                 })
-
-    //             }))
-
-    //         }
-
-    //     }
-    //     // await new Promise(resolve => setInterval(resolve, 1000))
-    //     setInterval(() => behaviour().then().catch(context.logger.error), 1000)
-
-    // }
 
 }

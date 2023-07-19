@@ -15,7 +15,8 @@ import { ExportService } from './services/export.service'
 import { SettingsService } from './services/settings.service'
 import { SourceService } from './services/source.service'
 import { TargetService } from './services/target.service'
-import { WorkerController } from './controllers/worker.controller'
+import { ExportWorkerController } from './controllers/export.worker.controller'
+import { RabbitMQAssertInputBuilder, RabbitMQHelper } from './helpers/rabbitmq.helper'
 
 EnvironmentHelper.config()
 MetricHelper.config()
@@ -34,10 +35,10 @@ Regex.controller(SourceSettingsController)
 Regex.controller(TargetSettingsController)
 Regex.controller(ExportController)
 Regex.controller(ExploreController)
-Regex.controller(WorkerController)
+Regex.controller(ExportWorkerController)
 
 RegexApplication.create({
-    settings: { http: true, amqp: true },
+    settings: { http: true, rabbitmq: true },
     startup: async ({ http }: StartupInput) => {
 
         const settings = Regex.inject(SettingsService)

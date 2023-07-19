@@ -101,8 +101,8 @@ async function _input<T extends Document>(request: HTTPIncomingMessage): Promise
     let source = undefined
     if (ObjectHelper.has(_source)) {
         const service = Regex.inject(SourceService)
-        const { uri } = await service.find({ name: _source }).next() as Source
-        source = { name: _source, client: new MongoClient(uri) }
+        const { url } = await service.find({ name: _source }).next() as Source
+        source = { name: _source, client: new MongoClient(url) }
     }
 
     const now = new Date()

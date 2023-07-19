@@ -7,7 +7,7 @@ import { SettingsService } from './settings.service'
 
 export interface Source extends MongoDBDocument<Source, 'name'> {
     name: string
-    uri: string
+    url: string
 }
 
 export class SourceService {
@@ -57,14 +57,14 @@ export class SourceService {
             throw new BadRequestError('source.name is empty')
         }
 
-        if (!ObjectHelper.has(document.uri)) {
-            throw new BadRequestError('source.uri is empty')
+        if (!ObjectHelper.has(document.url)) {
+            throw new BadRequestError('source.url is empty')
         }
 
         try {
-            await new MongoClient(document.uri).connect()
+            await new MongoClient(document.url).connect()
         } catch (error) {
-            throw new BadRequestError(`does not possible to connect at mongodb with received uri, error:`, error)
+            throw new BadRequestError(`does not possible to connect at mongodb with received url, error:`, error)
         }
 
     }

@@ -100,9 +100,9 @@ export class ExportWorker extends Worker {
 
         const { name, database, collection } = this.data.source
 
-        const { uri } = await service.find({ name }).next() as Source
+        const { url } = await service.find({ name }).next() as Source
 
-        const client = new MongoClient(uri)
+        const client = new MongoClient(url)
 
         const filter = ExportService.filter(this.stamps, this.window)
 

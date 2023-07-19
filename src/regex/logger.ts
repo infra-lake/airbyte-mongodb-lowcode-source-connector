@@ -5,10 +5,10 @@ export class Logger {
 
     public static get regex() { return '{random}' }
 
-    private _transaction?: string
+    private _transaction: string
 
-    constructor() {
-        this._transaction = randomUUID()
+    constructor(__transaction?: string) {
+        this._transaction = __transaction ?? randomUUID()
     }
 
     public static from(request: HTTPIncomingMessage) {

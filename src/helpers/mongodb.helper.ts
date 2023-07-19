@@ -3,6 +3,7 @@ import Stream from 'stream'
 import { ObjectHelper } from './object.helper'
 import { Stamps } from './stamps.helper'
 import { Window } from './window.helper'
+import { ApplicationHelper } from './application.helper'
 
 export interface MongoDBDocument<T extends MongoDBDocument<T, K>, K extends keyof T> {
 
@@ -28,7 +29,7 @@ export class MongoDBHelper {
 
     public static async collections({ client, database }: CollectionsInput) {
         const result = await client.db(database).collections()
-        return result
+        return result.filter(({ collectionName }) => !ApplicationHelper.REMOVE.COLLECTIONS.includes(collectionName))
     }
 
     public static find<T extends Document = Document>({ client, database, collection, filter, options }: FindInput<T>) {

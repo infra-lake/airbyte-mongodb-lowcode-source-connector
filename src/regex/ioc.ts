@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto'
 import { ObjectHelper } from '../helpers/object.helper'
 import { RegexHTTPController } from './http'
-import { RegexAMQPController } from './amqp'
+import { RegexRabbitMQController } from './rabbitmq'
 
 export enum RegexField {
     ID = '__regex_ioc_id',
@@ -15,9 +15,9 @@ export type RegexClass<T> = new (...args: any[]) => T
 export type RegexKey<T> = string | RegexClass<T>
 
 export type RegexHTTPControllerClass<T extends RegexHTTPController> = RegexClass<T> & { path: string }
-export type RegexAMQPControllerClass<T extends RegexAMQPController> = RegexClass<T> & { pattern: string }
+export type RegexAMQPControllerClass<T extends RegexRabbitMQController> = RegexClass<T> & { pattern: string }
 
-export type RegexAMQPControllerClassType = 'http' | 'amqp'
+export type RegexAMQPControllerClassType = 'http' | 'rabbitmq'
 export type RegexAMQPClassType = 'service' | RegexAMQPControllerClassType
 
 export class Regex {
@@ -75,7 +75,7 @@ export class Regex {
 
     }
 
-    public static controller<T extends RegexHTTPController | RegexAMQPController | undefined>(_controller: T extends RegexHTTPController ? RegexHTTPControllerClass<T> : T extends RegexAMQPController ? RegexAMQPControllerClass<T> : undefined, ...args: any[]): T {
+    public static controller<T extends RegexHTTPController | RegexRabbitMQController | undefined>(_controller: T extends RegexHTTPController ? RegexHTTPControllerClass<T> : T extends RegexRabbitMQController ? RegexAMQPControllerClass<T> : undefined, ...args: any[]): T {
 
         if (!ObjectHelper.has(_controller)) {
             return undefined as T

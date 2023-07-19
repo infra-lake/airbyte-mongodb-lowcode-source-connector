@@ -1,8 +1,11 @@
 import amqp, { Channel, ChannelWrapper } from 'amqp-connection-manager'
 import { IAmqpConnectionManager } from 'amqp-connection-manager/dist/esm/AmqpConnectionManager'
+import { PublishOptions } from 'amqp-connection-manager/dist/esm/ChannelWrapper'
 import { ConsumeMessage, Options } from 'amqplib'
 import { BadRequestError } from '../exceptions/badrequest.error'
-import { RegexAMQPController } from '../regex/amqp'
+import { InvalidParameterError } from '../exceptions/invalidparameter.error'
+import { Logger, Regex, TransactionalContext } from '../regex'
+import { RegexRabbitMQController } from '../regex/rabbitmq'
 import { EnvironmentHelper } from './environment.helper'
 import { HTTPHelper } from './http.helper'
 import { ObjectHelper } from './object.helper'
@@ -84,44 +87,60 @@ export interface RabbitMQQueue {
     vhost?: string
 }
 
-export type AMQPAssertInputType = 'queue' | 'exchange' | 'bind'
+export type RabbitMQAssertInputKind = 'queue' | 'exchange' | 'bind'
 
-export type AMQPAssertInputOptions<T extends AMQPAssertInputType> =
-    T extends 'queue' ? { options: Options.AssertQueue } :
-    T extends 'exchange' ? { type: string, options: Options.AssertExchange } :
-    { pattern: string, args?: any }
+export type RabbitMQAssertInputOptions<T extends RabbitMQAssertInputKind> =
+    T extends 'queue' ? Options.AssertQueue :
+    T extends 'exchange' ? Options.AssertExchange :
+    any
 
-export type AMQPAssertInput<T extends AMQPAssertInputType> = 
-    { type: T, options: AMQPAssertInputOptions<T> } & 
-    (T extends 'bind' ? { queue: string, exchange: string } : { name: string })
+export type RabbitMQAssertInput<T extends RabbitMQAssertInputKind> =
+    { kind: T } &
+    (T extends 'bind' ? { queue: string, exchange: string, pattern: string } : T extends 'exchange' ? { name: string, type: string } : { name: string }) &
+    (T extends 'bind' ? { args?: RabbitMQAssertInputOptions<T> } : { options?: RabbitMQAssertInputOptions<T> })
 
-export type AMQPConsumeInputAsserts = {
-    queue: Omit<AMQPAssertInput<'queue'>, 'type' | 'options'> & { options: AMQPAssertInputOptions<'queue'>['options'] },
-    exchange?: Omit<AMQPAssertInput<'exchange'>, 'type' | 'options'> & { type: AMQPAssertInputOptions<'exchange'>['type'], options: AMQPAssertInputOptions<'exchange'>['options'] },
-    bind?: Omit<AMQPAssertInput<'bind'>, 'type' | 'queue' | 'exchange'>
+export class RabbitMQAssertInputBuilder {
+    private constructor() { }
+    public static build<T extends RabbitMQAssertInputKind>(value: RabbitMQAssertInput<T>) {
+        return value
+    }
 }
-export type AMQPConsumeInput<T extends RegexAMQPController> = {
-    name: string,
+
+export type RabbitMQConsumeInput<T extends RegexRabbitMQController> = {
+    consumer: string,
+    queue: string,
     handle: T['handle'],
-    asserts: AMQPConsumeInputAsserts,
     options?: Options.Consume
+}
+
+export type RabbitMQProduceInput = {
+    queue: string,
+    content: Buffer | string | unknown,
+    options?: PublishOptions
+}
+
+export interface RabbitMQIncomingMessage extends ConsumeMessage, TransactionalContext {
+    json<T>(): T
 }
 
 export class RabbitMQHelper {
 
     private static _connection?: IAmqpConnectionManager = undefined
-    private static readonly _channels: Array<ChannelWrapper> = []
+    private static _producer?: ChannelWrapper = undefined
     private static readonly consumers: Array<string> = []
 
     public static get connection(): IAmqpConnectionManager | undefined {
         return RabbitMQHelper._connection
     }
 
-    public static get channels(): Array<ChannelWrapper> {
-        return RabbitMQHelper._channels
+    private static get producer(): ChannelWrapper {
+        if (!ObjectHelper.has(RabbitMQHelper._producer)) {
+            RabbitMQHelper._producer = (RabbitMQHelper.connection as IAmqpConnectionManager).createChannel({ json: false })
+        }
+        return RabbitMQHelper._producer as ChannelWrapper
     }
 
-    public static get uris() {
+    public static get urls() {
         return {
             amqp: EnvironmentHelper.get('RABBITMQ_AMQP_URLS', '').split(',').filter(url => url),
             http: EnvironmentHelper.get('RABBITMQ_HTTP_URL', '')
@@ -134,18 +153,18 @@ export class RabbitMQHelper {
     }
 
     public static connect() {
-        RabbitMQHelper._connection = amqp.connect(RabbitMQHelper.uris.amqp)
+        RabbitMQHelper._connection = amqp.connect(RabbitMQHelper.urls.amqp)
         return RabbitMQHelper
     }
 
     public static async queues(): Promise<Array<RabbitMQQueue>> {
 
-        const { uris } = RabbitMQHelper
+        const { urls } = RabbitMQHelper
 
-        const [username, password] = uris.amqp[0].substring(uris.amqp[0].indexOf('://') + 3, uris.amqp[0].indexOf('@')).split(':')
+        const [username, password] = urls.amqp[0].substring(urls.amqp[0].indexOf('://') + 3, urls.amqp[0].indexOf('@')).split(':')
 
         const response = await HTTPHelper.request({
-            url: `${uris.http}/api/queues/${RabbitMQHelper.vhost}`, options: {
+            url: `${urls.http}/api/queues/${RabbitMQHelper.vhost}`, options: {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
@@ -160,7 +179,7 @@ export class RabbitMQHelper {
 
     }
 
-    public static async assert<T extends AMQPAssertInputType>(input: AMQPAssertInput<T>) {
+    public static async assert<T extends RabbitMQAssertInputKind>(...inputs: Array<RabbitMQAssertInput<T>>) {
 
         if (!ObjectHelper.has(RabbitMQHelper.connection)) {
             throw new BadRequestError('amqp connection was not bootstraped')
@@ -169,22 +188,26 @@ export class RabbitMQHelper {
         const wrapper = (RabbitMQHelper.connection as IAmqpConnectionManager).createChannel({
             json: false,
             setup: (channel: Channel) => {
+                return Promise.all(inputs.map((input => {
 
-                if (input.type === 'queue') {
-                    const { options } = input.options as AMQPAssertInputOptions<'queue'>
-                    return channel.assertQueue((input as any).name, options)
-                }
+                    if (input.kind === 'queue') {
+                        const { name, options } = input as RabbitMQAssertInput<'queue'>
+                        return channel.assertQueue(name, options)
+                    }
 
-                if (input.type === 'exchange') {
-                    const { type, options } = input.options as AMQPAssertInputOptions<'exchange'>
-                    return channel.assertExchange((input as any).name, type, options)
-                }
+                    if (input.kind === 'exchange') {
+                        const { name, type, options } = input as RabbitMQAssertInput<'exchange'>
+                        return channel.assertExchange(name, type, options)
+                    }
 
-                if (input.type === 'bind') {
-                    const { pattern, args } = input.options as AMQPAssertInputOptions<'bind'>
-                    return channel.bindQueue((input as any).queue, (input as any).exchange, pattern, args)
-                }
+                    if (input.kind === 'bind') {
+                        const { queue, exchange, pattern, args } = input as RabbitMQAssertInput<'bind'>
+                        return channel.bindQueue(queue, exchange, pattern, args)
+                    }
 
+                    throw new InvalidParameterError('kind', `cannot assert kind "${input.kind}", assert kind must be "queue", "exchange" or "bind"`)
+
+                })))
             }
         })
 
@@ -193,10 +216,10 @@ export class RabbitMQHelper {
 
     }
 
-    public static async consume<T extends RegexAMQPController>({ name, handle, asserts, options }: AMQPConsumeInput<T>) {
+    public static async consume<T extends RegexRabbitMQController>({ consumer, queue, handle, options }: RabbitMQConsumeInput<T>) {
 
-        const _consumer = `${name}:${asserts.queue.name}`
-        const exists = RabbitMQHelper.consumers.filter(consumer => consumer === _consumer).length > 0
+        const _key = `${consumer}:${queue}`
+        const exists = RabbitMQHelper.consumers.filter(key => key === _key).length > 0
         if (exists) {
             return
         }
@@ -211,30 +234,28 @@ export class RabbitMQHelper {
 
                 const promises = []
 
-                if (ObjectHelper.has(asserts.exchange)) {
-                    promises.push(channel.assertExchange(
-                        asserts.exchange?.name as string, 
-                        asserts.exchange?.type as string, 
-                        asserts.exchange?.options
-                    ))
-                }
+                promises.push(channel.consume(queue, async (message) => {
 
-                promises.push(channel.assertQueue(asserts.queue.name, asserts.queue.options))
-
-                if (ObjectHelper.has(asserts.bind)) {
-                    promises.push(channel.bindQueue(
-                        asserts.queue.name,
-                        asserts.exchange?.name as string, 
-                        asserts.bind?.options.pattern as string,
-                        asserts.bind?.options.args
-                    ))
-                }
-
-                promises.push(channel.consume(asserts.queue.name, async (message) => {
                     if (!ObjectHelper.has(message)) {
                         return
                     }
-                    await handle(message as ConsumeMessage, channel)
+                    
+                    const logger = Regex.register(Logger, message?.properties.correlationId)
+
+                    try {
+            
+                        const _message = message as any as RabbitMQIncomingMessage
+                        _message.logger = logger
+                        _message.transaction = _message.logger.transaction
+                        _message.json = <T>() => JSON.parse(_message.content.toString('utf-8')) as T
+    
+                        await handle(queue, _message, channel)
+
+                    } catch (error) {
+                        logger.error('an unexpected error occurred:', error)
+                        channel.nack(message as ConsumeMessage)
+                    }
+
                 }, options))
 
                 return Promise.all(promises)
@@ -244,9 +265,14 @@ export class RabbitMQHelper {
 
         await wrapper.waitForConnect()
 
-        RabbitMQHelper.channels.push(wrapper)
-        RabbitMQHelper.consumers.push(_consumer)
+        RabbitMQHelper.consumers.push(_key)
 
     }
+
+    public static async produce({ queue, content, options }: RabbitMQProduceInput) {
+        return await RabbitMQHelper.producer.sendToQueue(queue, content, options)
+    }
+
+
 
 }

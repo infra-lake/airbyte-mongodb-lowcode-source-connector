@@ -1,7 +1,7 @@
 import { AuthHelper } from '../helpers/auth.helper'
 import { QueryStringHelper } from '../helpers/querystring.helper'
 import { Regex, RegexHTTPController, HTTPIncomingMessage, HTTPServerResponse, TransactionalContext } from '../regex'
-import { Export4Save, ExportService } from '../services/export.service'
+import { Export4Create, ExportService } from '../services/export.service'
 
 
 export class ExportController implements RegexHTTPController {
@@ -14,11 +14,11 @@ export class ExportController implements RegexHTTPController {
             return
         }
 
-        const context: TransactionalContext = request
-        const entity = await request.json<Export4Save>()
+        const entity = await request.json<Export4Create>()
+        entity.transaction = request.transaction
 
         const service = Regex.inject(ExportService)
-        const transaction = await service.register(context, entity)
+        const transaction = await service.create(entity)
 
         response.write(JSON.stringify({ transaction }))
         response.end()
