@@ -9,10 +9,12 @@ import { Regex, TransactionalContext, Worker } from '../regex'
 import { Export, ExportService } from '../services/export.service'
 import { Source, SourceService } from '../services/source.service'
 import { Target, TargetService } from '../services/target.service'
+import sizeof from 'object-sizeof'
+import bytes from 'bytes'
 
 type ExportWorkerSource = { client: MongoClient, database: string, collection: string, filter: any }
 type ExportWorkerTarget = { client: BigQuery, dataset: string, table: { main: Table, temporary: Table } }
-type ExportWorkerStatisticsInput = { total: number, remaining: number }
+type ExportWorkerStatisticsInput = { total: number, remaining: number, ingested: { size: number }, data: any[] }
 
 export class ExportWorker extends Worker {
 
@@ -50,10 +52,11 @@ export class ExportWorker extends Worker {
             target = await this.target()
 
             const total = await MongoDBHelper.count(source)
-            this.logger.log(`exporting ${total} row(s)...`)
+            this.logger.log(`exporting ${total.toLocaleString('pt-BR')} row(s)...`)
 
             let batch = []
             let remaining = total
+            let size = 0
 
             const cursor = MongoDBHelper.find(source)
             while (await cursor.hasNext()) {
@@ -70,9 +73,11 @@ export class ExportWorker extends Worker {
 
                     const table = target.table.temporary
 
-                    const { ingested, percent } = this.statistics({ total, remaining })
+                    const { ingested, current } = this.statistics({ ingested: { size }, remaining, total, data: batch })
 
-                    this.logger.log(`flushing ${batch.length} rows to bigquery temporary table "${table.metadata.id}" (${percent}%, ${ingested} rows)...`)
+                    size = ingested.size
+
+                    this.logger.log(`flushing ${batch.length.toLocaleString('pt-BR')} rows (${bytes(current.size)}) to bigquery temporary table "${table.metadata.id}" (${ingested.percent.toFixed(2)}%, ${ingested.total.toLocaleString('pt-BR')} rows, ${bytes(ingested.size)})...`)
 
                     await table.insert(batch)
 
@@ -245,10 +250,15 @@ export class ExportWorker extends Worker {
 
     }
 
-    private statistics({ total, remaining }: ExportWorkerStatisticsInput) {
+    private statistics({ total, remaining, ingested, data }: ExportWorkerStatisticsInput) {
+        const size = data.map(sizeof).reduce((sum, value) => sum + value, 0)
         return {
-            ingested: total - remaining,
-            percent: parseInt(((1 - (remaining / total)) * 100).toString())
+            ingested: {
+                total: total - remaining,
+                percent: (1 - (remaining / total)) * 100,
+                size: ingested.size + size
+            },
+            current: { size }
         }
     }
 
