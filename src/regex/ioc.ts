@@ -44,10 +44,10 @@ export class Regex {
         const instances =
             Object
                 .keys(Regex.instances)
-                .filter(regex => text.match(regex) ?? text === regex)
-                .flatMap(key => Regex.instances[key])
-                .filter(instance =>  {
-                    
+                .filter(regex => {
+
+                    const instance = Regex.instances[regex]
+
                     if (!ObjectHelper.has(type)) {
                         return true
                     }
@@ -57,8 +57,10 @@ export class Regex {
                     }
 
                     return instance[RegexField.CONTROLLER] === type
-                
+
                 })
+                .filter(regex => text.match(regex) ?? text === regex)
+                .flatMap(key => Regex.instances[key])
         
         const result =
             instances.length > 1
@@ -92,7 +94,7 @@ export class Regex {
         type[RegexField.MULTIPLE] = true
         type[RegexField.TYPE] = type.name
         type[RegexField.MULTIPLE] = type[RegexField.MULTIPLE]
-        type[RegexField.CONTROLLER] = 'path' in type ? 'http' : 'amqp'
+        type[RegexField.CONTROLLER] = 'path' in type ? 'http' : 'rabbitmq'
 
         const instance: any = new type(...args)
         instance[RegexField.ID] = type[RegexField.ID]

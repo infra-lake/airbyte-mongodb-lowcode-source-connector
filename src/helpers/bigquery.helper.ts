@@ -2,7 +2,7 @@ import { BigQuery, TableSchema } from "@google-cloud/bigquery";
 
 export type DatasetInput = { client: BigQuery, name: string }
 export type TableInput = { client: BigQuery, dataset: string, table: TableSchema & { name: string } }
-export type SanitizeInput = { value: string, to: 'dataset-name' | 'table-name' | 'sql' }
+export type SanitizeInput = { value: string }
 
 export class BigQueryHelper {
 
@@ -34,16 +34,9 @@ export class BigQueryHelper {
 
     }
 
-    public static sanitize({ value, to }: SanitizeInput) {
-        
-        const result = value.trim().replace(/\-/g, '_').replace(/\./g, '_').replace(/\s/g, '_')
-        
-        if (to === 'sql') {
-            return `\`${result.replace(/\./g, '`.`')}\``
-        }
-
+    public static sanitize({ value }: SanitizeInput) {
+        const result = value.trim().replace(/\-/g, '_').replace(/\s/g, '_').replace(/\./g, '_')
         return result
-    
     }
 
 }

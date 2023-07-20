@@ -42,7 +42,7 @@ export class HTTP {
 
 async function listener(request: IncomingMessage, response: ServerResponse) {
 
-    const _request = HTTPHelper.incoming(request)
+    const _request = HTTPHelper.incoming({ message: request, transactional: true })
     const _response = HTTPHelper.response(response)
 
     try {

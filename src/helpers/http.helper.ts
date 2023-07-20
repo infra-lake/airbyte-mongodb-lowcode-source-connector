@@ -5,14 +5,19 @@ import { ResilienceHelper } from './resilience.helper'
 
 export type HTTPRequestInput<T extends 'http' | 'https'> = { url: string, options: T extends 'http' ? http.RequestOptions : https.RequestOptions }
 
+export type HTTPHelperIncomingInput = { message: http.IncomingMessage, transactional: boolean }
+
 export class HTTPHelper {
 
-    public static incoming(message: http.IncomingMessage): HTTPIncomingMessage {
+    public static incoming({ message, transactional }: HTTPHelperIncomingInput): HTTPIncomingMessage {
 
         const request = message as any as HTTPIncomingMessage
         
-        request.logger = Regex.register(Logger)
-        request.transaction = request.logger.transaction as string
+        if (transactional) {
+            request.logger = Regex.register(Logger)
+            request.transaction = request.logger.transaction as string
+        }
+
         request.getURL = () => new URL(request.url as string, `http://${request.headers.host}`)
         request.body = async () => await HTTPHelper.body(request)
         request.json = async <T>() => JSON.parse(await request.body()) as T
@@ -44,8 +49,6 @@ export class HTTPHelper {
                 .on('data', (chunk: string) => data += chunk)
                 .on('end', () => resolve(data))
                 .on('error', reject)
-                .on('pause', () => request.logger.debug('request paused'))
-                .on('resume', () => request.logger.debug('request resumed'))
         })
     }
 
@@ -57,7 +60,7 @@ export class HTTPHelper {
 
         return new Promise<HTTPIncomingMessage>((resolve, reject) => {
             const __request = _request(url, options, (message: http.IncomingMessage) => {
-                const _message = HTTPHelper.incoming(message)
+                const _message = HTTPHelper.incoming({ message, transactional: false })
                 resolve(_message)
             })
             __request.on('error', reject)

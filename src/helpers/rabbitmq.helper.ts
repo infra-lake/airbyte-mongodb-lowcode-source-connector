@@ -254,6 +254,8 @@ export class RabbitMQHelper {
                     } catch (error) {
                         logger.error('an unexpected error occurred:', error)
                         channel.nack(message as ConsumeMessage)
+                    } finally {
+                        Regex.unregister(logger)
                     }
 
                 }, options))

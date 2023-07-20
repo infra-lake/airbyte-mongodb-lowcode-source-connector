@@ -10,7 +10,7 @@ export abstract class Worker {
     protected abstract perform(attempt: number, error: Error): Promise<void>
 
     protected get milliseconds(): number {
-        return 1000
+        return 10000
     }
 
     public async run() {

@@ -48,11 +48,12 @@ export class ExportWorker extends Worker {
             source = await this.source()
             target = await this.target()
 
-            let count = await MongoDBHelper.count(source)
-            this.logger.log(`exporting ${count} row(s)...`)
+            const total = await MongoDBHelper.count(source)
+            this.logger.log(`exporting ${total} row(s)...`)
 
             let batch = []
-
+            let count = total
+            
             const cursor = MongoDBHelper.find(source)
             while (await cursor.hasNext()) {
 
@@ -60,13 +61,20 @@ export class ExportWorker extends Worker {
 
                 const row = this.row(document, now)
 
-                const flush = (--count % this.limit) === 0 || count <= 0
+                batch.push(row)
+
+                const flush = (count-- % this.limit) === 0 || count <= 0
 
                 if (flush) {
-                    await target.table.temporary.insert(batch)
+                    
+                    const table = target.table.temporary
+
+                    this.logger.log(`flushing ${batch.length} rows to bigquery temporary table "${table.metadata.id}" (${parseInt(((1-(count/total))*100).toString())}%, ${total-count} rows)...`)
+                    
+                    await table.insert(batch)
+                    
                     batch = []
-                } else {
-                    batch.push(row)
+
                 }
 
             }
@@ -122,7 +130,7 @@ export class ExportWorker extends Worker {
 
         const { database } = this.data.source
 
-        const dataset = BigQueryHelper.sanitize({ value: `${this.stamps.dataset.name}${database}`, to: 'dataset-name' })
+        const dataset = BigQueryHelper.sanitize({ value: `${this.stamps.dataset.name}${database}` })
 
         const main = await BigQueryHelper.table({ client, dataset, table: this.table('main') })
         const temporary = await BigQueryHelper.table({ client, dataset, table: this.table('temporary') })
@@ -135,10 +143,10 @@ export class ExportWorker extends Worker {
 
         const { collection } = this.data.source
 
-        let name = BigQueryHelper.sanitize({ value: collection, to: 'table-name' })
+        let name = BigQueryHelper.sanitize({ value: collection })
 
         if (type === 'temporary') {
-            name = BigQueryHelper.sanitize({ value: `${name}_${randomUUID()}_temp`, to: 'table-name' })
+            name = BigQueryHelper.sanitize({ value: `${name}_${this.data.transaction}_temp` })
         }
 
         return {
@@ -173,8 +181,7 @@ export class ExportWorker extends Worker {
         }
 
         if (Array.isArray(object)) {
-            object.forEach(this.fix)
-            return object
+            return object.map(item => this.fix(item))
         }
 
         if (typeof object === 'object') {
@@ -202,8 +209,10 @@ export class ExportWorker extends Worker {
 
     private async consolidate(target: ExportWorkerTarget) {
 
-        const main = BigQueryHelper.sanitize({ value: target.table.main.metadata.id.replace(/\:/g, '.'), to: 'sql' })
-        const temporary = BigQueryHelper.sanitize({ value: target.table.temporary.metadata.id.replace(/\:/g, '.'), to: 'sql' })
+        this.logger.log(`consolidating temporary data to table "${target.table.main.metadata.id}"...`)
+
+        const main = `\`${target.table.main.metadata.id.replace(/\:/g, '.').replace(/\./g, '`.`')}\``
+        const temporary =  `\`${target.table.temporary.metadata.id.replace(/\:/g, '.').replace(/\./g, '`.`')}\``
 
         await target.client.query(`
                 INSERT ${main} (${StampsHelper.DEFAULT_STAMP_ID}, ${StampsHelper.DEFAULT_STAMP_INSERT}, data, \`hash\`)
