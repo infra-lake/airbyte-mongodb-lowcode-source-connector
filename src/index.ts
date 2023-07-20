@@ -2,6 +2,7 @@ import { MongoClient } from 'mongodb'
 import { NotFoundController } from './controllers/default/notfound.controller'
 import { ExploreController } from './controllers/explore.controller'
 import { ExportController } from './controllers/export.controller'
+import { ExportWorkerController } from './controllers/export.worker.controller'
 import { HealthController } from './controllers/observability/health.controller'
 import { MetricsController } from './controllers/observability/metrics.controller'
 import { SettingsController } from './controllers/settings/controller'
@@ -15,8 +16,6 @@ import { ExportService } from './services/export.service'
 import { SettingsService } from './services/settings.service'
 import { SourceService } from './services/source.service'
 import { TargetService } from './services/target.service'
-import { ExportWorkerController } from './controllers/export.worker.controller'
-import { RabbitMQAssertInputBuilder, RabbitMQHelper } from './helpers/rabbitmq.helper'
 
 EnvironmentHelper.config()
 MetricHelper.config()
