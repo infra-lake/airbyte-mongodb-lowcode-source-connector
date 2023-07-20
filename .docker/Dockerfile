@@ -27,5 +27,4 @@ COPY --from=production-packages /opt/app/package.json ./package.json
 COPY --from=production-packages /opt/app/package-lock.json ./package-lock.json
 COPY --from=production-packages /opt/app/node_modules ./node_modules
 COPY --from=production-packages /opt/app/dist ./dist
-COPY --from=production-packages /opt/app/templates ./templates
 CMD ["dist/index.js"]
