@@ -18,7 +18,6 @@ FROM base AS production-packages
 WORKDIR /opt/app/
 ADD ./package.json ./package.json
 ADD ./package-lock.json ./package-lock.json
-ADD ./templates ./templates
 RUN npm ci --omit=dev
 COPY --from=build /opt/app/dist /opt/app/dist
 
