@@ -1,5 +1,5 @@
 import { BigQuery, BigQueryTimestamp, Table } from '@google-cloud/bigquery'
-import { createHash, randomUUID } from 'crypto'
+import { createHash } from 'crypto'
 import { MongoClient } from 'mongodb'
 import { BigQueryHelper } from '../helpers/bigquery.helper'
 import { MongoDBHelper } from '../helpers/mongodb.helper'
@@ -12,6 +12,7 @@ import { Target, TargetService } from '../services/target.service'
 
 type ExportWorkerSource = { client: MongoClient, database: string, collection: string, filter: any }
 type ExportWorkerTarget = { client: BigQuery, dataset: string, table: { main: Table, temporary: Table } }
+type ExportWorkerStatisticsInput = { total: number, remaining: number }
 
 export class ExportWorker extends Worker {
 
@@ -52,8 +53,8 @@ export class ExportWorker extends Worker {
             this.logger.log(`exporting ${total} row(s)...`)
 
             let batch = []
-            let count = total
-            
+            let remaining = total
+
             const cursor = MongoDBHelper.find(source)
             while (await cursor.hasNext()) {
 
@@ -63,16 +64,18 @@ export class ExportWorker extends Worker {
 
                 batch.push(row)
 
-                const flush = (count-- % this.limit) === 0 || count <= 0
+                const flush = (remaining-- % this.limit) === 0 || remaining <= 0
 
                 if (flush) {
-                    
+
                     const table = target.table.temporary
 
-                    this.logger.log(`flushing ${batch.length} rows to bigquery temporary table "${table.metadata.id}" (${parseInt(((1-(count/total))*100).toString())}%, ${total-count} rows)...`)
-                    
+                    const { ingested, percent } = this.statistics({ total, remaining })
+
+                    this.logger.log(`flushing ${batch.length} rows to bigquery temporary table "${table.metadata.id}" (${percent}%, ${ingested} rows)...`)
+
                     await table.insert(batch)
-                    
+
                     batch = []
 
                 }
@@ -212,7 +215,7 @@ export class ExportWorker extends Worker {
         this.logger.log(`consolidating temporary data to table "${target.table.main.metadata.id}"...`)
 
         const main = `\`${target.table.main.metadata.id.replace(/\:/g, '.').replace(/\./g, '`.`')}\``
-        const temporary =  `\`${target.table.temporary.metadata.id.replace(/\:/g, '.').replace(/\./g, '`.`')}\``
+        const temporary = `\`${target.table.temporary.metadata.id.replace(/\:/g, '.').replace(/\./g, '`.`')}\``
 
         await target.client.query(`
                 INSERT ${main} (${StampsHelper.DEFAULT_STAMP_ID}, ${StampsHelper.DEFAULT_STAMP_INSERT}, data, \`hash\`)
@@ -240,6 +243,13 @@ export class ExportWorker extends Worker {
                     )
             `)
 
+    }
+
+    private statistics({ total, remaining }: ExportWorkerStatisticsInput) {
+        return {
+            ingested: total - remaining,
+            percent: parseInt(((1 - (remaining / total)) * 100).toString())
+        }
     }
 
 }

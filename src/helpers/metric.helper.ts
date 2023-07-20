@@ -12,12 +12,19 @@ export class MetricHelper {
     })
     public static get http_received_request_total() { return MetricHelper._http_received_request_total }
 
+    private static _rabbitmq_received_message_total = new Counter({
+        name: 'rabbitmq_received_message_total',
+        help: 'Total of Received RabbitMQ AMQP Messages',
+        labelNames: [ 'queue', 'status' ]
+    })
+    public static get rabbitmq_received_message_total() { return MetricHelper._rabbitmq_received_message_total }
+
     private static _service_exponential_backoff_total = new Gauge({
         name: 'service_exponential_backoff_total',
         help: 'Exponential Backoff of Service'
     })
     public static get service_exponential_backoff_total() { return MetricHelper._service_exponential_backoff_total }
-
+    
     public static config() {
 
         if (MetricHelper.configured) {

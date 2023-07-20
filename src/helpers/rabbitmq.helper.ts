@@ -9,6 +9,7 @@ import { RegexRabbitMQController } from '../regex/rabbitmq'
 import { EnvironmentHelper } from './environment.helper'
 import { HTTPHelper } from './http.helper'
 import { ObjectHelper } from './object.helper'
+import { MetricHelper } from './metric.helper'
 
 export interface Details {
     rate?: number
@@ -242,6 +243,8 @@ export class RabbitMQHelper {
                     
                     const logger = Regex.register(Logger, message?.properties.correlationId)
 
+                    MetricHelper.rabbitmq_received_message_total.inc({ queue })
+
                     try {
             
                         const _message = message as any as RabbitMQIncomingMessage
@@ -251,8 +254,11 @@ export class RabbitMQHelper {
     
                         await handle(queue, _message, channel)
 
+                        MetricHelper.rabbitmq_received_message_total.inc({ queue, status: 'success' })
+
                     } catch (error) {
                         logger.error('an unexpected error occurred:', error)
+                        MetricHelper.rabbitmq_received_message_total.inc({ queue, status: 'error' })
                         channel.nack(message as ConsumeMessage)
                     } finally {
                         Regex.unregister(logger)
